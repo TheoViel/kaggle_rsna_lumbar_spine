@@ -213,11 +213,6 @@ def upload_to_kaggle(folders, directory, dataset_name, update_folders=True):
                     directory + name,
                     ignore=lambda src, names: [n for n in names if "mask" in n],
                 )
-        for i in range(4):
-            try:
-                os.remove(f"{directory + name}/fts_val_{i}.npy")
-            except Exception:
-                pass
 
     print(f"\nDataset size : {get_size(directory):.3f} Go")
 
@@ -229,7 +224,7 @@ def upload_to_kaggle(folders, directory, dataset_name, update_folders=True):
         print("- Create new dataset ! ")
         # Create dataset-metadata.json
         with open(directory + "dataset-metadata.json", "w") as f:
-            slug = re.sub(" ", "-", dataset_name.lower())
+            slug = re.sub(r"\s+", "-", dataset_name.lower())
             dic = {
                 "title": f"{dataset_name}",
                 "id": f"theoviel/{slug}",
