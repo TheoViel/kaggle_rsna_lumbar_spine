@@ -4,17 +4,17 @@ import torch
 import warnings
 import argparse
 
-from data.preparation import prepare_data
+from data.preparation import prepare_coords_data
 from util.torch import init_distributed
 from util.logger import (
     create_logger,
     save_config,
     prepare_log_folder,
-    init_neptune,
+    # init_neptune,
     get_last_log_folder,
 )
 
-from params import DATA_PATH
+# from params import DATA_PATH
 
 
 def parse_args():
@@ -78,75 +78,80 @@ class Config:
     """
     Parameters used for training
     """
-
     # General
     seed = 42
     verbose = 1
-    device = "cuda"
-    save_weights = True
+
+    pipe = "coords"
+    targets = "target"
 
     # Data
-    resize = (512, 512)
+    coords_folder = "../input/coords/"
+    resize = (384, 384)
     frames_chanel = 1
     n_frames = 1
     stride = 1
+    aug_strength = 0
+    crop = False
 
-    aug_strength = 5
-    crop = True
+    use_coords_crop = False
+    load_in_ram = False
+    use_mask = False
 
     # k-fold
     k = 4
     folds_file = f"../input/folds_{k}.csv"
     selected_folds = [0, 1, 2, 3]
 
-    # Model
-    name = "maxvit_tiny_tf_512"  # convnextv2_tiny maxvit_tiny_tf_384
+    # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium maxvit_tiny_tf_384
+    name = "coatnet_rmlp_2_rw_384"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
-    num_classes = 11
+    num_classes = 10
     num_classes_aux = 0
-    drop_rate = 0.05 if "convnext" in name else 0.2
-    drop_path_rate = 0.05 if "convnext" in name else 0.2
+    drop_rate = 0.2
+    drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    use_gem = True
+    pooling = "avg" if "coat_" in name else "avg_w"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training
     loss_config = {
-        "name": "patient",
+        "name": "sigmoid_mse",
         "weighted": False,
         "use_any": False,
         "smoothing": 0.0,
-        "activation": "patient",
-        "aux_loss_weight": 0.0,  # Not ok with cutmix!
-        "name_aux": "patient",
+        "activation": "sigmoid",
+        "aux_loss_weight": 0.,
+        "name_aux": "",
         "smoothing_aux": 0.0,
-        "activation_aux": "",
+        "activation_aux": "sigmoid",
     }
 
     data_config = {
-        "batch_size": 32 if n_frames <= 1 else 8,
-        "val_bs": 32 if n_frames <= 1 else 16,
-        "mix": "cutmix",
-        "mix_proba": 0.5,
+        "batch_size": 16,  # 8
+        "val_bs": 32,
+        "mix": "mixup",
+        "mix_proba": 0.,
         "sched": False,
         "mix_alpha": 4,
         "additive_mix": False,
-        "num_classes": num_classes,
+        "num_classes": 3,
+        "num_classes_aux": 5,
         "num_workers": 8,
     }
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4 if n_frames <= 1 else 2e-4,
+        "lr": 5e-4,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
-        "max_grad_norm": 0.1,
+        "max_grad_norm": 1.0,
         "weight_decay": 0.0,
     }
 
-    epochs = 40 if n_frames == 1 else 30
+    epochs = 30
 
     use_fp16 = True
     verbose = 1
@@ -183,7 +188,6 @@ if __name__ == "__main__":
         else:
             time.sleep(2)
             log_folder = get_last_log_folder(LOG_PATH)
-    #             print(log_folder)
 
     if args.model:
         config.name = args.model
@@ -201,11 +205,9 @@ if __name__ == "__main__":
         config.data_config["batch_size"] = args.batch_size
         config.data_config["val_bs"] = args.batch_size
 
-    df_patient, df_img = prepare_data(DATA_PATH)
-
     run = None
     if config.local_rank == 0:
-        run = init_neptune(config, log_folder)
+        # run = init_neptune(config, log_folder)
 
         if args.fold > -1:
             config.selected_folds = [args.fold]
@@ -227,28 +229,30 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
+    df = prepare_coords_data(config.coords_folder)
+
     from training.main import k_fold
+    k_fold(config, df, log_folder=log_folder, run=run)
 
-    k_fold(config, df_patient, df_img, log_folder=log_folder, run=run)
+    # if len(config.selected_folds) == 4:
+    #     if config.local_rank == 0:
+    #         print("\n -> Inference\n")
 
-    if len(config.selected_folds) == 4:
-        if config.local_rank == 0:
-            print("\n -> Extracting features\n")
+    #     from inference.lvl1 import kfold_inference
 
-        if config.head_3d:
-            raise NotImplementedError
-        else:
-            from inference.extract_features import kfold_inference
+    #     df = prepare_coords_data(config.coords_folder)
 
-        kfold_inference(
-            df_patient,
-            df_img,
-            log_folder,
-            use_fp16=config.use_fp16,
-            save=True,
-            distributed=True,
-            config=config,
-        )
+    #     # log_folder = "../logs/2024-08-06/17/"
+
+    #     kfold_inference(
+    #         df,
+    #         log_folder,
+    #         use_fp16=config.use_fp16,
+    #         save=True,
+    #         distributed=True,
+    #         config=config,
+    #         use_aux=True,
+    #     )
 
     if config.local_rank == 0:
         print("\nDone !")

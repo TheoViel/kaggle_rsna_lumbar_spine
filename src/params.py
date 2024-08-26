@@ -61,6 +61,14 @@ CLASSES_SS_NOLVL = [
     "right_subarticular_stenosis",
 ]
 
+CLASSES_CROP = [
+    "spinal_canal_stenosis",
+    "left_neural_foraminal_narrowing",
+    "right_neural_foraminal_narrowing",
+    "left_subarticular_stenosis",
+    "right_subarticular_stenosis",
+]
+
 LEVELS = ['L1/L2', 'L2/L3', 'L3/L4', 'L4/L5', 'L5/S1']
 LEVELS_ = ['l1_l2', 'l2_l3', 'l3_l4', 'l4_l5', 'l5_s1']
 

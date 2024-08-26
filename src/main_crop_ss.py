@@ -4,7 +4,7 @@ import torch
 import warnings
 import argparse
 
-from data.preparation import prepare_data_scs
+from data.preparation import prepare_data_ss_crop
 from util.torch import init_distributed
 from util.logger import (
     create_logger,
@@ -82,13 +82,12 @@ class Config:
     seed = 42
     verbose = 1
 
-    pipe = "crop_scs"
+    pipe = "crop_ss"
     targets = "target"
 
     # Data
-    # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/coords_crops_0.1/"
-
+    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/coords_crops_0.15/"
     resize = (224, 224)
     frames_chanel = 1
     n_frames = 5
@@ -108,7 +107,7 @@ class Config:
 
     num_classes = 3
     num_classes_aux = 0
-    drop_rate = 0.
+    drop_rate = 0.  # WAS NOT USED, TWEAK ?
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
@@ -129,10 +128,10 @@ class Config:
     }
 
     data_config = {
-        "batch_size": 16,  # 8
+        "batch_size": 16,
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,  # 1.0
+        "mix_proba": 0.5,
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
@@ -149,7 +148,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 5
+    epochs = 4
 
     use_fp16 = True
     verbose = 1
@@ -228,7 +227,7 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
-    df = prepare_data_scs(DATA_PATH, crop_folder=config.crop_folder)
+    df = prepare_data_ss_crop(DATA_PATH, crop_folder=config.crop_folder)
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)

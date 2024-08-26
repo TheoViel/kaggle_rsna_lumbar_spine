@@ -4,7 +4,7 @@ import torch
 import warnings
 import argparse
 
-from data.preparation import prepare_data_scs
+from data.preparation import prepare_data_crop
 from util.torch import init_distributed
 from util.logger import (
     create_logger,
@@ -82,20 +82,21 @@ class Config:
     seed = 42
     verbose = 1
 
-    pipe = "crop_scs"
+    pipe = "crop_ax"
     targets = "target"
 
     # Data
     # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/coords_crops_0.1/"
+    crop_folder = "../input/crops_ax/"
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5
+    n_frames = 3
     stride = 1
-    aug_strength = 3
-    crop = False
+    aug_strength = 5
+    crop = True
     use_coords_crop = False
+    load_in_ram = False
 
     # k-fold
     k = 4
@@ -106,7 +107,7 @@ class Config:
     name = "coatnet_1_rw_224"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
-    num_classes = 3
+    num_classes = 15
     num_classes_aux = 0
     drop_rate = 0.
     drop_path_rate = 0.
@@ -117,11 +118,11 @@ class Config:
 
     # Training
     loss_config = {
-        "name": "ce",
+        "name": "series",
         "weighted": False,
         "use_any": False,
         "smoothing": 0.0,
-        "activation": "softmax",
+        "activation": "series",
         "aux_loss_weight": 0.0,
         "name_aux": "patient",
         "smoothing_aux": 0.0,
@@ -132,11 +133,11 @@ class Config:
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,  # 1.0
+        "mix_proba": 1.0,  # 1.0
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
-        "num_classes": num_classes,
+        "num_classes": 3,
         "num_workers": 8,
     }
 
@@ -228,7 +229,7 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
-    df = prepare_data_scs(DATA_PATH, crop_folder=config.crop_folder)
+    df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder, axial=True)
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)

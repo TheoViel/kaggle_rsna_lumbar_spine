@@ -1,3 +1,5 @@
+import os
+import cv2
 import torch
 import numpy as np
 import pandas as pd
@@ -98,7 +100,7 @@ class ImageDataset(Dataset):
         self.stride = stride
 
         self.train = train
-        self.coords = df["coords"].values
+        self.coords = df["coords"].values if "coords" in df.columns else None
 
         self.load_in_ram = load_in_ram
         self.load_imgs_in_ram()
@@ -109,8 +111,15 @@ class ImageDataset(Dataset):
             return
 
         for path in np.unique(self.img_paths):
-            img = np.load(path).astype(np.float32)
-            img = (img - img.min()) / (img.max() - img.min()) * 255
+            try:
+                img = np.load(path).astype(np.float32)
+                # img = np.clip(
+                #     img, np.percentile(img.flatten(), 0), np.percentile(img.flatten(), 98)
+                # )
+                img = (img - img.min()) / (img.max() - img.min()) * 255
+            except FileNotFoundError:
+                img = np.zeros((1, 64, 64))
+
             img = img.astype(np.uint8)
             self.imgs[path] = img
 
@@ -145,7 +154,7 @@ class ImageDataset(Dataset):
         # Pick frame(s)
         try:
             xs = self.coords[idx][:, 0]
-        except TypeError:  # No coords
+        except Exception:  # No coords
             xs = [len(img) // 2]
 
         if self.train:
@@ -164,9 +173,14 @@ class ImageDataset(Dataset):
 
         # Load
         image = img[np.array(frames)].transpose(1, 2, 0)
+
         image = image.astype(np.float32) / 255.0
 
-        # image = (image - image.min()) / (image.max() - image.min())
+        # image = np.clip(
+        #     image, np.percentile(image.flatten(), 0), np.percentile(image.flatten(), 98)
+        # )
+
+        image = (image - image.min()) / (image.max() - image.min())
 
         # Augment
         if self.transforms:
@@ -225,9 +239,14 @@ class CropDataset(ImageDataset):
             load_in_ram=load_in_ram,
             train=train,
         )
+        if isinstance(self.targets[0], list):
+            self.targets = np.vstack(self.targets)
 
         try:
-            self.sides = df["side"].map({"Right": 1, "Center": 4, "Left": 7}).values
+            if "coords_crops" in df["img_path"][0]:
+                self.sides = df["side"].map({"Right": 2, "Center": 4, "Left": 6}).values
+            else:  # Cropped with seg
+                self.sides = df["side"].map({"Right": 1, "Center": 4, "Left": 7}).values
         except KeyError:
             self.sides = np.ones(len(df)) * 4  # All Center for scs
 
@@ -251,8 +270,11 @@ class CropDataset(ImageDataset):
         try:
             img = self.imgs[self.img_paths[idx]]
         except KeyError:
-            img = np.load(self.img_paths[idx]).astype(np.float32)
-            img = (img - img.min()) / (img.max() - img.min()) * 255
+            try:
+                img = np.load(self.img_paths[idx]).astype(np.float32)
+                img = (img - img.min()) / (img.max() - img.min()) * 255
+            except FileNotFoundError:
+                img = np.zeros((1, 64, 64))
             img = img.astype(np.uint8)
 
         # Pick frame(s)
@@ -283,9 +305,16 @@ class CropDataset(ImageDataset):
             transformed = self.transforms(image=image)
             image = transformed["image"]
 
-        y = torch.zeros(3, dtype=torch.float)
-        if self.targets[idx] > -1:
-            y[self.targets[idx]] = 1
+        tgt = self.targets[idx]
+        if isinstance(self.targets[idx], (int, float)):
+            y = torch.zeros(3, dtype=torch.float)
+            if tgt > -1:
+                y[tgt] = 1
+        else:
+            y = torch.zeros((len(tgt), 3), dtype=torch.float)
+            for i in range(len(tgt)):
+                if tgt[i] > -1:
+                    y[i, tgt[i]] = 1
 
         # Reshape
         if self.frames_chanel:
@@ -296,6 +325,74 @@ class CropDataset(ImageDataset):
             image = image[0]
 
         return image, y, 0
+
+
+class CoordsDataset(Dataset):
+    """
+    Dataset for training 2.5D crop classification models.
+    """
+
+    def __init__(
+        self,
+        df,
+        targets="target",
+        transforms=None,
+        train=False,
+        **kwargs,
+    ):
+        """
+        Constructor for the CropDataset class.
+
+        Args:
+            df (pandas DataFrame): Metadata containing the information.
+            transforms (albu transforms, optional): Transforms to apply. Defaults to None.
+            frames_chanel (int, optional): Number of frames for channel stacking. Defaults to 0.
+            n_frames (int, optional): The number of frames to use. Defaults to 0.
+            stride (int, optional): The step size between frames. Defaults to 1.
+            train (bool, optional): Whether the dataset is for training. Defaults to False.
+        """
+        self.df = df
+        self.targets = np.array(df[targets].values.tolist())
+        self.img_paths = df["img_path"].values
+
+        if "target_aux" in df.columns:
+            self.targets_aux = df["target_aux"].values
+        else:
+            self.targets_aux = np.zeros(len(df))
+        self.transforms = transforms
+
+    def __len__(self):
+        """
+        Get the length of the dataset.
+
+        Returns:
+            int: Length of the dataset.
+        """
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        """
+        Item accessor. Samples a random frame inside the organ.
+
+        Args:
+            idx (int): Index.
+
+        Returns:
+            torch.Tensor: Image as a tensor of shape [(N,) C, H, W].
+            torch.Tensor: Label as a tensor of shape [3].
+            int: Dummy value.
+        """
+        image = cv2.imread(self.img_paths[idx]).astype(np.float32) / 255.0
+
+        # Augment
+        if self.transforms:
+            transformed = self.transforms(image=image)
+            image = transformed["image"]
+
+        y = torch.from_numpy(self.targets[idx])
+        y_aux = torch.tensor([self.targets_aux[idx]])
+
+        return image, y, y_aux
 
 
 class Seg3dDataset(Dataset):
@@ -375,7 +472,7 @@ class Seg3dDataset(Dataset):
                 self.imgs[self.img_paths[idx]] = np.load(self.img_paths[idx]).astype(
                     np.float32
                 )
-                self.masks[self.mask_paths[idx]] = np.load(self.mask_paths[idx]).astype(
+                self.masks[self.masseries_kpaths[idx]] = np.load(self.masseries_kpaths[idx]).astype(
                     np.uint8
                 )
 
@@ -524,9 +621,10 @@ class FeatureDataset(Dataset):
         fts = {}
         for fold in range(4):
             preds = np.load(exp_folder + f'pred_inf_{fold}.npy')
-            df = pd.read_csv(
-                exp_folder + f'df_val_{fold}.csv'
-            )[["study_id", "series_id", "level", "side"]].astype(str)
+            df = pd.read_csv(exp_folder + f'df_val_{fold}.csv')
+            if "side" not in df.columns:
+                df['side'] = 'Center'
+            df = df[["study_id", "series_id", "level", "side"]].astype(str)
             index = ["_".join(row.tolist()) for row in df.values]
             fts.update(dict(zip(index, preds)))
         return fts
@@ -549,32 +647,41 @@ class FeatureDataset(Dataset):
 
         fts = {}
         for k in self.exp_folders:
-            k_ = k.split("_")[0]
-            # print(k_)
+            series_k = k.split("_")[0]
+            series_k = [series_k] if series_k in ["ss", "nfn", "scs"] else ["ss", "nfn", "scs"]
+            # print(series_k)
             if "crop" in k:
-                sides = ['Center'] if "scs" in k else ["Left", "Right"]
+                sides = ["Left", "Right"] if "nfn" in k or "ss" in k else ['Center']
                 ft = []
                 for lvl in LEVELS:
                     for side in sides:
-                        # print(f'{study}_{series[k_]}_{lvl}_{side}')
-                        ft.append(
-                            self.fts[k].get(f'{study}_{series[k_]}_{lvl}_{side}', np.zeros(3))
-                        )
+                        ft_ = []
+                        for sk in series_k:
+                            ft_k = f'{study}_{series[sk]}_{lvl}_{side}'
+                            if ft_k in self.fts[k]:
+                                ft_.append(self.fts[k][ft_k])
+                        if len(ft_):
+                            ft.append(np.mean(ft_, 0))
+                        else:
+                            ft.append(np.zeros(3) if "crop" in k else np.zeros(25))
                 ft = np.vstack(ft)
 
             else:
                 sub_folder = "preds_aux/" if "aux" in k else "preds/"
-                try:
-                    ft = np.load(self.exp_folders[k] + f'{sub_folder}/{study}_{series[k_]}.npy')
-                    # print(k, ft.shape)
-                except FileNotFoundError:
-                    ft = self.dummies[k]
+                ft_ = []
+                for sk in series_k:
+                    path = self.exp_folders[k] + f'{sub_folder}/{study}_{series[sk]}.npy'
+                    if os.path.exists(path):
+                        ft_.append(np.load(path))
+
+                    ft = np.mean(ft_, 0) if len(ft_) else self.dummies[k]
 
             if k in self.sizes:
                 ft = self.resize_fts(ft, self.sizes[k])
                 ft = ft.reshape(self.sizes[k], -1)
             else:
                 ft = ft.flatten()
+
             fts[k] = torch.from_numpy(ft).float().contiguous()
 
         y = torch.from_numpy(self.targets[idx])

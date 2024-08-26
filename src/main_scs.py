@@ -86,7 +86,7 @@ class Config:
     targets = CLASSES_SCS
 
     # Data
-    crop_folder = "../input/crops_2/"
+    crop_folder = ""
     resize = (384, 384)
     frames_chanel = 1
     n_frames = 1
@@ -108,11 +108,11 @@ class Config:
 
     num_classes = 15
     num_classes_aux = 0
-    drop_rate = 0.2
+    drop_rate = 0.
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    use_gem = False
+    pooling = "avg"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training

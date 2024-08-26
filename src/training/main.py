@@ -8,7 +8,7 @@ from torch.nn.parallel import DistributedDataParallel
 from training.train import fit
 from model_zoo.models import define_model
 
-from data.dataset import CropDataset, ImageDataset
+from data.dataset import CropDataset, ImageDataset, CoordsDataset
 from data.transforms import get_transfos
 
 from util.torch import seed_everything, count_parameters, save_model_weights
@@ -31,7 +31,12 @@ def train(
     Returns:
         tuple: A tuple containing predictions and metrics.
     """
-    dataset_class = CropDataset if "crop" in config.pipe else ImageDataset
+    if "crop" in config.pipe:
+        dataset_class = CropDataset
+    elif "coord" in config.pipe:
+        dataset_class = CoordsDataset
+    else:
+        dataset_class = ImageDataset
 
     transfos = get_transfos(
         strength=config.aug_strength, resize=config.resize, crop=config.crop
@@ -76,7 +81,7 @@ def train(
         config.name,
         drop_rate=config.drop_rate,
         drop_path_rate=config.drop_path_rate,
-        use_gem=config.use_gem,
+        pooling=config.pooling if hasattr(config, "pooling") else "avg",
         head_3d=config.head_3d,
         n_frames=config.n_frames,
         num_classes=config.num_classes,
@@ -148,6 +153,7 @@ def k_fold(config, df, log_folder=None, run=None):
     """
     folds = pd.read_csv(config.folds_file)
     df = df.merge(folds, how="left")
+    df['fold'] = df['fold'].fillna(-1)
 
     # from params import DATA_PATH
     # from data.preparation import prepare_data_scs

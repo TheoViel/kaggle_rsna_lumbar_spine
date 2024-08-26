@@ -58,6 +58,19 @@ class SmoothCrossEntropyLoss(nn.Module):
         return loss
 
 
+class SigmoidMSELoss(nn.Module):
+    """
+    Sigmoid on preds + MSE
+    """
+    def forward(self, inputs, targets):
+        inputs = inputs.view(targets.size()).sigmoid()
+        mask = (targets == -1)
+        loss = ((inputs * 100 - targets * 100) ** 2)
+        # loss = torch.abs(inputs * 100 - targets * 100)
+        loss = loss.masked_fill(mask, 0)
+        return loss.mean(-1)
+
+
 class SeriesLoss(nn.Module):
     """
     Custom loss function for series predictions.
@@ -215,6 +228,8 @@ class SpineLoss(nn.Module):
                 weighted=config.get("weighted", False),
                 use_any=config.get("use_any", False),
             )
+        elif config["name"] == "sigmoid_mse":
+            self.loss = SigmoidMSELoss()
         else:
             raise NotImplementedError
 

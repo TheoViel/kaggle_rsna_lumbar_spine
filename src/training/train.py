@@ -170,7 +170,7 @@ def fit(
         num_classes_aux=data_config.get("num_classes_aux", 1),
     )
 
-    auc, rsna_metrics = 0, {}
+    auc, dist, rsna_metrics = 0, 0, {}
     step, step_ = 1, 1
     avg_losses = []
     start_time = time.time()
@@ -191,7 +191,8 @@ def fit(
                 if data_config["sched"]
                 else data_config["mix_proba"]
             )
-            if np.random.random() < mix_p:
+            skip_mix = (y.min() == -1) or (len(y.squeeze().size()) > 1 and y.sum(-1).min() > 0)
+            if np.random.random() < mix_p and not skip_mix:
                 x, y, y_aux, _ = mix(x, y, y_aux)
 
             with torch.cuda.amp.autocast(enabled=use_fp16):
@@ -263,6 +264,10 @@ def fit(
                         auc = roc_auc_score(
                             val_dataset.targets.flatten(), preds.flatten()
                         )
+                    elif preds.shape[1] in [10, 4]:  # Coords
+                        y = val_dataset.targets.flatten()
+                        dist = np.abs(y - preds.flatten())
+                        dist = (dist[y > 0] * 100).mean()
                     else:
                         raise NotImplementedError
 
@@ -272,6 +277,7 @@ def fit(
                         s = s + f"    {k}_loss={rsna_metrics[k]:.3f}"
                     s = s + f"\t val_loss={avg_val_loss:.3f}" if avg_val_loss else s
                     s = s + f"    auc={auc:.3f}" if auc else s
+                    s = s + f"    dist={dist:.3f}" if dist else s
 
                     print(s)
 

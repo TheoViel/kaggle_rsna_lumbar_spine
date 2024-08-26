@@ -86,7 +86,7 @@ class Config:
     targets = CLASSES_SS_NOLVL
 
     # Data
-    crop_folder = "../input/crops_2/"
+    crop_folder = ""
     resize = (224, 224)
     frames_chanel = 1
     n_frames = 1
@@ -102,7 +102,7 @@ class Config:
     folds_file = f"../input/folds_{k}.csv"
     selected_folds = [0, 1, 2, 3]
 
-    # Model  # coatnet_1_rw_224 coat_lite_medium_384
+    # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium
     name = "coat_lite_medium"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
@@ -112,7 +112,7 @@ class Config:
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    use_gem = False
+    pooling = "avg" if "coat_" in name else "avg_h"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training
@@ -241,7 +241,7 @@ if __name__ == "__main__":
 
         df = prepare_data_ss(DATA_PATH, explode=False)
 
-        # log_folder = "../logs/2024-08-06/17/"
+        # log_folder = "../logs/2024-08-13/10/"
 
         kfold_inference(
             df,

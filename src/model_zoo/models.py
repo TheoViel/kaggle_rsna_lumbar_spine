@@ -20,7 +20,7 @@ def define_model(
     increase_stride=False,
     drop_rate=0,
     drop_path_rate=0,
-    use_gem=False,
+    pooling="avg",
     head_3d="",
     n_frames=1,
     verbose=1,
@@ -40,7 +40,6 @@ def define_model(
         increase_stride (bool, optional): Whether to increase the model's stride. Defaults to False.
         drop_rate (float, optional): Dropout rate. Defaults to 0.
         drop_path_rate (float, optional): Drop path rate. Defaults to 0.
-        use_gem (bool, optional): Whether to use GeM pooling. Defaults to False.
         head_3d (str, optional): 3D head type. Defaults to "".
         n_frames (int, optional): Number of frames. Defaults to 1.
         verbose (int, optional): Verbosity level. Defaults to 1.
@@ -48,13 +47,13 @@ def define_model(
     Returns:
         ClsModel: The defined model.
     """
-    if drop_path_rate > 0 and "coat" not in name:
+    if drop_path_rate > 0 and "coat_" not in name:
         encoder = timm.create_model(
             name,
             pretrained=pretrained,
             drop_path_rate=drop_path_rate,
             num_classes=0,
-            global_pool="avg" if "coat" in name else "",
+            global_pool="",
         )
     elif "efficientvit" in name:
         encoder = timm.create_model(
@@ -63,12 +62,22 @@ def define_model(
             num_classes=0,
         )
         encoder.num_features = encoder.head.classifier[0].out_features
+    elif "coat_" in name:
+        encoder = timm.create_model(
+            name,
+            pretrained=pretrained,
+            drop_path_rate=drop_path_rate,
+            num_classes=0,
+            global_pool=pooling if pooling in ["avg", "token"] else "avg",
+        )
+        if pooling == "flatten":
+            encoder.forward = lambda x: encoder.forward_features(x)[:, 1:]
     else:
         encoder = timm.create_model(
             name,
             pretrained=pretrained,
             num_classes=0,
-            global_pool="avg" if "coat" in name else "",
+            global_pool="",
         )
     encoder.name = name
 
@@ -78,7 +87,7 @@ def define_model(
         num_classes_aux=num_classes_aux,
         n_channels=n_channels,
         drop_rate=drop_rate,
-        use_gem=use_gem,
+        pooling=pooling,
         head_3d=head_3d,
         n_frames=n_frames,
     )
@@ -106,7 +115,6 @@ class ClsModel(nn.Module):
         num_classes_aux (int): The number of auxiliary classes.
         n_channels (int): The number of input channels.
         drop_rate (float): Dropout rate.
-        use_gem (bool): Flag to use Generalized Mean Pooling (GeM).
         head_3d (str): The 3D head type.
         n_frames (int): The number of frames.
     """
@@ -114,25 +122,15 @@ class ClsModel(nn.Module):
         self,
         encoder,
         num_classes=2,
-        num_classes_aux=11,
+        num_classes_aux=0,
         n_channels=3,
         drop_rate=0,
-        use_gem=False,
+        pooling="avg",
         head_3d="",
         n_frames=1,
     ):
         """
         Constructor for the classification model.
-
-        Args:
-            encoder: The feature encoder.
-            num_classes (int): The number of primary classes.
-            num_classes_aux (int): The number of auxiliary classes.
-            n_channels (int): The number of input channels.
-            drop_rate (float): Dropout rate.
-            use_gem (bool): Flag to use Generalized Mean Pooling (GeM).
-            head_3d (str): The 3D head type.
-            n_frames (int): The number of frames.
         """
         super().__init__()
 
@@ -142,10 +140,21 @@ class ClsModel(nn.Module):
         self.num_classes = num_classes
         self.num_classes_aux = num_classes_aux
         self.n_channels = n_channels
-        self.use_gem = use_gem
+        self.pooling = pooling
         self.head_3d = head_3d
 
-        self.global_pool = GeM(p_trainable=False)
+        if pooling == "gem":
+            self.global_pool = GeM(p_trainable=False)
+        elif pooling in ["avg_h", "avg_w"]:
+            if "224" in encoder.name or encoder.name == "coat_lite_medium":
+                self.nb_ft *= 7
+            elif "384" in encoder.name:
+                self.nb_ft *= 12
+            else:
+                raise NotImplementedError
+        elif pooling == "flatten":
+            self.nb_ft *= 49  # coat
+
         self.dropout = nn.Dropout(drop_rate) if drop_rate else nn.Identity()
 
         if head_3d == "lstm":
@@ -242,14 +251,27 @@ class ClsModel(nn.Module):
         """
         fts = self.encoder(x)
 
-        if "swin" in self.encoder.name:
-            fts = fts.transpose(2, 3).transpose(1, 2)
+        # print(fts.size())
 
-        if self.use_gem and len(fts.size()) == 4:
+        if self.pooling == "gem":
+            assert len(fts.size()) == 4
             fts = self.global_pool(fts)[:, :, 0, 0]
-        else:
+        elif self.pooling == "avg":
             while len(fts.size()) > 2:
                 fts = fts.mean(-1)
+        elif self.pooling == "avg_w":  # For L1 / L2 / ...
+            while len(fts.size()) > 3:
+                fts = fts.mean(-1)
+            fts = fts.flatten(-2, -1)
+        elif self.pooling == "avg_h":  # For left / right
+            while len(fts.size()) > 3:
+                fts = fts.mean(-2)
+            fts = fts.flatten(-2, -1)
+        elif self.pooling == "flatten":
+            while len(fts.size()) > 2:
+                fts = fts.flatten(-2, -1)
+
+        # print(fts.size())
 
         fts = self.dropout(fts)
 
@@ -287,6 +309,7 @@ class ClsModel(nn.Module):
         """
         if self.head_3d == "avg":
             return x.mean(1)
+
         elif self.head_3d == "max":
             return x.amax(1)
 
@@ -295,6 +318,7 @@ class ClsModel(nn.Module):
             mean = x.mean(1)
             max_ = x.amax(1)
             x = torch.cat([mean, max_], -1)
+
         elif self.head_3d == "lstm_att":
             x, _ = self.lstm(x)
             x = self.att(x)

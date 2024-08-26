@@ -112,7 +112,7 @@ class Config:
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    use_gem = False
+    pooling = "avg_w"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training

@@ -134,7 +134,7 @@ def kfold_inference(
             config.name,
             drop_rate=config.drop_rate,
             drop_path_rate=config.drop_path_rate,
-            use_gem=config.use_gem,
+            pooling=config.pooling if hasattr(config, "pooling") else "avg",
             head_3d=config.head_3d,
             n_frames=config.n_frames,
             num_classes=config.num_classes,
@@ -207,8 +207,11 @@ def kfold_inference(
         elif use_aux:
             for i, c in enumerate(config.targets):
                 for lv, lvl in enumerate(LEVELS_):
-                    auc = disk_auc(df_val[c + "_" + lvl].values, preds[:, lv, i])
-                    aucs.append(auc)
+                    try:
+                        auc = disk_auc(df_val[c + "_" + lvl].values, preds[:, lv, i])
+                        aucs.append(auc)
+                    except Exception:
+                        aucs.append(0)
         else:
             for i, c in enumerate(config.targets):
                 auc = disk_auc(df_val[c].values, preds[:, i])
@@ -263,7 +266,7 @@ def kfold_inference_crop(
             config.name,
             drop_rate=config.drop_rate,
             drop_path_rate=config.drop_path_rate,
-            use_gem=config.use_gem,
+            pooling=config.pooling,
             head_3d=config.head_3d,
             n_frames=config.n_frames,
             num_classes=config.num_classes,
@@ -311,5 +314,12 @@ def kfold_inference_crop(
 
         preds = np.array(preds)
 
-        auc = disk_auc(df_val["target"].values, preds)
-        print(f'\n -> Fold {fold} - Average AUC: {auc:.4f}')
+        if isinstance(df_val["target"].values[0], list):
+            y = np.vstack(df_val["target"].values)
+            auc = np.mean([
+                disk_auc(y[:, i], preds[:, i]) for i in range(y.shape[1])
+            ])
+        else:
+            auc = disk_auc(df_val["target"].values, preds)
+
+        print(f'\n -> Fold {fold + 1} - Average AUC: {auc:.4f}')

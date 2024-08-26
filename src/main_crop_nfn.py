@@ -86,10 +86,11 @@ class Config:
     targets = "target"
 
     # Data
-    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/crops_fix/"
+    crop_folder = "../input/coords_crops_0.15/"
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 3
+    n_frames = 5
     stride = 1
     aug_strength = 3
     crop = False
@@ -106,11 +107,11 @@ class Config:
 
     num_classes = 3
     num_classes_aux = 0
-    drop_rate = 0.2
+    drop_rate = 0.  # WAS NOT USED, TWEAK ?
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    use_gem = False
+    pooling = "avg"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training

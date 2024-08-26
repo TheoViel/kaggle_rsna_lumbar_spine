@@ -49,6 +49,7 @@ def define_model(
             p=p,
             num_classes=num_classes,
             num_classes_aux=num_classes_aux,
+            n_fts=n_fts,
         )
     else:
         raise NotImplementedError
@@ -85,22 +86,33 @@ class BaselineModel(nn.Module):
         self.num_classes = num_classes
         self.num_classes_aux = num_classes_aux
 
-        self.mlps = nn.ModuleDict({
-            "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-            "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-            "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
-        })
+        logits_fts = 0   # 36 * 2  # Mean & max pool scs/ss/nfn
 
-        self.lstms = nn.ModuleDict({
-            k: nn.LSTM(dense_dim, lstm_dim, batch_first=True, bidirectional=True)
-            for k in ['nfn', 'scs', "ss"]
-        })
+        self.lstms, self.mlps = {}, {}
+        if lstm_dim:
+            self.mlps = nn.ModuleDict({
+                "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
+                "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
+                "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
+            })
+            self.lstms = nn.ModuleDict({
+                k: nn.LSTM(dense_dim, lstm_dim, batch_first=True, bidirectional=True)
+                for k in ['nfn', 'scs', "ss"]
+            })
+            logits_fts += 4 * lstm_dim * 2 * resize
 
-        self.crop_mlp = nn.Sequential(nn.Linear(45, dense_dim * 4), nn.Mish())
+        self.crop_mlp = None
+        if n_fts:
+            logits_fts += dense_dim  # * 4
+            self.crop_mlp = nn.Sequential(
+                nn.Linear(n_fts, dense_dim),
+                nn.Dropout(p=p),
+                nn.Mish()
+            )
 
         self.logits = nn.Sequential(
+            nn.Linear(logits_fts, dense_dim),
             nn.Dropout(p=p),
-            nn.Linear(2 * lstm_dim * 4 * resize + dense_dim * 4, dense_dim),
             nn.Mish(),
             nn.Linear(dense_dim, num_classes),
         )
@@ -109,25 +121,31 @@ class BaselineModel(nn.Module):
         """
         Forward pass of the RNN with attention model.
         """
-        bs = x['ss'].size(0)
+        bs = x['crop'].size(0)
+        fts = torch.empty((bs, 0)).to(x['crop'].device)
 
-        # x['ss'] = torch.cat([x['ss'], x['ss_aux']], -1)
+        # print(fts.size())
 
-        fts = {}
-        for k in self.mlps:
-            features = self.mlps[k](x[k])
-            features_lstm, _ = self.lstms[k](features)
-            fts[k] = features_lstm.reshape(bs, -1)
+        fts_lstm = {}
+        if len(self.mlps):
+            for k in self.mlps:
+                features = self.mlps[k](x[k])
+                features_lstm, _ = self.lstms[k](features)
+                fts_lstm[k] = features_lstm.reshape(bs, -1)
 
-        fts = torch.cat([fts[k] for k in fts], -1)
+            fts_lstm = torch.cat([fts_lstm[k] for k in fts_lstm], -1)
+            fts = torch.cat([fts, fts_lstm], 1)
 
-        crop_fts = torch.cat([x['nfn_crop'], x['scs_crop']], 1)
-        crop_fts = self.crop_mlp(crop_fts)
+        # print(fts.size())
 
-        fts = torch.cat([fts, crop_fts], 1)
+        if self.crop_mlp is not None:
+            crop_fts = torch.cat([x[k] for k in x if "crop" in k], 1)
+            crop_fts = self.crop_mlp(crop_fts)
+            fts = torch.cat([fts, crop_fts], 1)
+
+        # print(fts.size())
 
         logits = self.logits(fts).view(bs, -1, 3)
-
         return logits, torch.zeros(bs)
 
 

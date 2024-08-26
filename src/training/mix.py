@@ -42,17 +42,17 @@ class Mixup(nn.Module):
 
         if self.num_classes > y.size(-1):  # One-hot
             y = y.view(-1, 1).long()
-            print(y)
+            # print(y)
             y = torch.zeros(y.size(0), self.num_classes).to(device).scatter(1, y, 1)
             if y.size(0) != bs:  # handles multilabel
                 y = y.view(bs, -1, self.num_classes)
 
         if self.num_classes_aux > y_aux.size(-1):  # One-hot
             y_aux = y_aux.view(-1, 1).long()
-            print('!')
-            print(y_aux)
+            # print('!')
+            # print(y_aux)
             y_aux = torch.zeros(y_aux.size(0), self.num_classes_aux).to(device).scatter(1, y_aux, 1)
-            print('?')
+            # print('?')
             if y_aux.size(0) != bs:  # handles multilabel
                 y_aux = y_aux.view(bs, -1, self.num_classes_aux)
 
@@ -73,17 +73,17 @@ class Mixup(nn.Module):
             if y_aux is not None:
                 y_aux = torch.cat([y_aux.unsqueeze(0), y_aux[perm].unsqueeze(0)], 0).amax(0)
         else:
+            if y_aux is not None:
+                y_aux = coeffs * y_aux + (1 - coeffs) * y_aux[perm]
+
             if len(y.shape) == 1:
                 y = coeffs * y + (1 - coeffs) * y[perm]
-                if y_aux is not None:
-                    y_aux = coeffs * y_aux + (1 - coeffs) * y_aux[perm]
-            else:
+            elif len(y.shape) == 2:
                 y = coeffs.view(-1, 1) * y + (1 - coeffs.view(-1, 1)) * y[perm]
-                if y_aux is not None:
-                    y_aux = (
-                        coeffs.view(-1, 1) * y_aux
-                        + (1 - coeffs.view(-1, 1)) * y_aux[perm]
-                    )
+            elif len(y.shape) == 3:
+                y = coeffs.view(-1, 1, 1) * y + (1 - coeffs.view(-1, 1, 1)) * y[perm]
+            else:
+                raise NotImplementedError
 
         return x, y, y_aux, None
 
