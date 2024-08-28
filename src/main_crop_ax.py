@@ -87,7 +87,7 @@ class Config:
 
     # Data
     # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/crops_ax/"
+    crop_folder = "../input/crops_ax_0.15/"
 
     resize = (224, 224)
     frames_chanel = 1
@@ -96,7 +96,7 @@ class Config:
     aug_strength = 5
     crop = True
     use_coords_crop = False
-    load_in_ram = False
+    load_in_ram = True
 
     # k-fold
     k = 4
@@ -113,7 +113,7 @@ class Config:
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    pooling = "avg"
+    pooling = "avg_h"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training

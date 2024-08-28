@@ -87,7 +87,7 @@ class Config:
 
     # Data
     # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/coords_crops_0.1/"
+    crop_folder = "../input/coords_crops_0.1_/"
 
     resize = (224, 224)
     frames_chanel = 1
@@ -99,7 +99,7 @@ class Config:
 
     # k-fold
     k = 4
-    folds_file = f"../input/folds_{k}.csv"
+    folds_file = "../input/train_folded_v1.csv"  # f"../input/folds_{k}.csv"
     selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
