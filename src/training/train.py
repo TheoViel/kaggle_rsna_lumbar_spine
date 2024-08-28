@@ -66,7 +66,8 @@ def evaluate(
             elif loss_config["activation"] in ["series", "study"]:
                 y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
             else:
-                raise NotImplementedError
+                pass
+                # raise NotImplementedError
 
             preds.append(y_pred.detach())
             preds_aux.append(y_pred_aux.detach())
@@ -247,10 +248,8 @@ def fit(
                     lr = scheduler.get_last_lr()[0]
                     step_ = step * world_size
 
-                    preds, preds_aux = (
-                        preds[: len(val_dataset)],
-                        preds_aux[: len(val_dataset)],
-                    )
+                    preds = preds[: len(val_dataset)]
+
                     if preds.shape[1] == 25:
                         rsna_metrics = rsna_loss(val_dataset.targets, preds)[1]
                     elif len(preds.shape) == 3:
@@ -265,7 +264,7 @@ def fit(
                             val_dataset.targets.flatten(), preds.flatten()
                         )
                     elif preds.shape[1] in [10, 4]:  # Coords
-                        y = val_dataset.targets.flatten()
+                        y = val_dataset.targets_rel.flatten()
                         dist = np.abs(y - preds.flatten())
                         dist = (dist[y > 0] * 100).mean()
                     else:
@@ -287,7 +286,7 @@ def fit(
                     run[f"fold_{fold}/train/lr"].log(lr, step=step_)
                     if not np.isnan(avg_val_loss):
                         run[f"fold_{fold}/val/loss"].log(avg_val_loss, step=step_)
-                    run[f"fold_{fold}/val/auc"].log(auc, step=step_)
+                    run[f"fold_{fold}/val/auc"].log(dist if dist else auc, step=step_)
 
                 start_time = time.time()
                 avg_losses = []

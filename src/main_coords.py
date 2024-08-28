@@ -10,7 +10,7 @@ from util.logger import (
     create_logger,
     save_config,
     prepare_log_folder,
-    # init_neptune,
+    init_neptune,
     get_last_log_folder,
 )
 
@@ -91,12 +91,13 @@ class Config:
     frames_chanel = 1
     n_frames = 1
     stride = 1
-    aug_strength = 0
+    aug_strength = 6
     crop = False
 
     use_coords_crop = False
     load_in_ram = False
     use_mask = False
+    use_ext = True
 
     # k-fold
     k = 4
@@ -113,7 +114,7 @@ class Config:
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    pooling = "avg" if "coat_" in name else "avg_w"
+    pooling = "flatten"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training
@@ -134,11 +135,11 @@ class Config:
         "val_bs": 32,
         "mix": "mixup",
         "mix_proba": 0.,
-        "sched": False,
+        "sched": True,
         "mix_alpha": 4,
         "additive_mix": False,
-        "num_classes": 3,
-        "num_classes_aux": 5,
+        "num_classes": 2,
+        "num_classes_aux": 0,
         "num_workers": 8,
     }
 
@@ -151,7 +152,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 30
+    epochs = 50
 
     use_fp16 = True
     verbose = 1
@@ -207,7 +208,7 @@ if __name__ == "__main__":
 
     run = None
     if config.local_rank == 0:
-        # run = init_neptune(config, log_folder)
+        run = init_neptune(config, log_folder)
 
         if args.fold > -1:
             config.selected_folds = [args.fold]
@@ -229,7 +230,7 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
-    df = prepare_coords_data(config.coords_folder)
+    df = prepare_coords_data(config.coords_folder, use_ext=config.use_ext)
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)

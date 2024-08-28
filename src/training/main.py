@@ -14,9 +14,7 @@ from data.transforms import get_transfos
 from util.torch import seed_everything, count_parameters, save_model_weights
 
 
-def train(
-    config, df_train, df_val, fold, log_folder=None, run=None
-):
+def train(config, df_train, df_val, fold, log_folder=None, run=None):
     """
     Train a crop model.
 
@@ -39,7 +37,10 @@ def train(
         dataset_class = ImageDataset
 
     transfos = get_transfos(
-        strength=config.aug_strength, resize=config.resize, crop=config.crop
+        strength=config.aug_strength,
+        resize=config.resize,
+        crop=config.crop,
+        use_keypoints="coords" in config.pipe,
     )
     train_dataset = dataset_class(
         df_train,
@@ -50,10 +51,15 @@ def train(
         stride=config.stride,
         use_coords_crop=config.use_coords_crop,
         train=True,
-        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False
+        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
     )
 
-    transfos = get_transfos(augment=False, resize=config.resize, crop=config.crop)
+    transfos = get_transfos(
+        augment=False,
+        resize=config.resize,
+        crop=config.crop,
+        use_keypoints="coords" in config.pipe,
+    )
     val_dataset = dataset_class(
         df_val,
         targets=config.targets,
@@ -62,7 +68,7 @@ def train(
         n_frames=config.n_frames,
         stride=config.stride,
         train=False,
-        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False
+        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
     )
 
     if config.pretrained_weights is not None:
@@ -153,7 +159,7 @@ def k_fold(config, df, log_folder=None, run=None):
     """
     folds = pd.read_csv(config.folds_file)
     df = df.merge(folds, how="left")
-    df['fold'] = df['fold'].fillna(-1)
+    df["fold"] = df["fold"].fillna(-1)
 
     # from params import DATA_PATH
     # from data.preparation import prepare_data_scs

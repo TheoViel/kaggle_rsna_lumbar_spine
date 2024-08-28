@@ -359,41 +359,54 @@ def prepare_data_crop(data_path, crop_folder=None, axial=False):
     return df
 
 
-def get_coords_target(row, axial=False):
+def get_coords_target(row, axial=False, relative=False):
     if axial:
         target = np.zeros((2, 2), dtype=float) - 1
         for s, side in enumerate(['Left', 'Right']):
             i = row.side.index(side)
-            target[s, 0] = row.relative_x[i]
-            target[s, 1] = row.relative_y[i]
+            if relative:
+                target[s, 0] = row.relative_x[i]
+                target[s, 1] = row.relative_y[i]
+            else:
+                target[s, 0] = row.x[i]
+                target[s, 1] = row.y[i]
     else:
         target = np.zeros((5, 2), dtype=float) - 1
         for lvl, level in enumerate(LEVELS):
             if level in row.level:
                 i = row.level.index(level)
-                target[lvl, 0] = row.relative_x[i]
-                target[lvl, 1] = row.relative_y[i]
+                if relative:
+                    target[lvl, 0] = row.relative_x[i]
+                    target[lvl, 1] = row.relative_y[i]
+                else:
+                    target[lvl, 0] = row.x[i]
+                    target[lvl, 1] = row.y[i]
     return target
 
 
-def prepare_coords_data(data_path="../input/coords/", axial=False):
+def prepare_coords_data(data_path="../input/coords/", axial=False, use_ext=False):
     if axial:
         df = pd.read_csv(data_path + 'coords_ax.csv')
         df = df.groupby(['study_id', 'series_id', "img_path"]).agg(list).reset_index()
 
         df['target'] = df.apply(lambda x: get_coords_target(x, True), axis=1).tolist()
     else:
-        df = pd.read_csv(data_path + "coords_pretrain.csv")
-        df["img_path"] = (
-            data_path + "data/processed_" + df["source"] + "_jpgs/" + df["filename"]
-        )
-        df = df.sort_values(["source", "filename", "level"], ignore_index=True)
-        df = df.rename(columns={"source": "study_id", "filename": "series_id"})
+        if use_ext:
+            df = pd.read_csv(data_path + "coords_pretrain.csv")
+            df["img_path"] = (
+                data_path + "data/processed_" + df["source"] + "_jpgs/" + df["filename"]
+            )
+            df = df.sort_values(["source", "filename", "level"], ignore_index=True)
+            df = df.rename(columns={"source": "study_id", "filename": "series_id"})
 
-        df = pd.concat([df, pd.read_csv(data_path + 'coords_comp.csv')], ignore_index=True)
+            df = pd.concat([df, pd.read_csv(data_path + 'coords_comp.csv')], ignore_index=True)
+        else:
+            df = pd.read_csv(data_path + 'coords_comp_3ch.csv')
+
         df = df.groupby(['study_id', 'series_id', "img_path"]).agg(list).reset_index()
 
-        df['target'] = df.apply(get_coords_target, axis=1).tolist()
+        df['target'] = df.apply(lambda x: get_coords_target(x, relative=False), axis=1).tolist()
+        df['target_rel'] = df.apply(lambda x: get_coords_target(x, relative=True), axis=1).tolist()
     return df
 
 

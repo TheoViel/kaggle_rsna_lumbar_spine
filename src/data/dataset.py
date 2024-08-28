@@ -355,10 +355,10 @@ class CoordsDataset(Dataset):
         self.targets = np.array(df[targets].values.tolist())
         self.img_paths = df["img_path"].values
 
-        if "target_aux" in df.columns:
-            self.targets_aux = df["target_aux"].values
+        if "target_rel" in df.columns:
+            self.targets_rel = np.array(df["target_rel"].values.tolist())
         else:
-            self.targets_aux = np.zeros(len(df))
+            self.targets_rel = np.zeros(len(df))
         self.transforms = transforms
 
     def __len__(self):
@@ -386,13 +386,28 @@ class CoordsDataset(Dataset):
 
         # Augment
         if self.transforms:
-            transformed = self.transforms(image=image)
+            y = self.targets[idx].copy()
+            # print(y)
+            transformed = self.transforms(image=image, keypoints=y[y.sum(-1) > 0].copy())
             image = transformed["image"]
 
-        y = torch.from_numpy(self.targets[idx])
-        y_aux = torch.tensor([self.targets_aux[idx]])
+        y = torch.tensor(y)
+        y[y.sum(-1) > 0] = torch.tensor(transformed["keypoints"])
+        y[:, 0] /= image.size(2)
+        y[:, 1] /= image.size(1)
+        y = torch.where(y < 0, -1, y)
+        y = torch.where(y > 1, -1, y)
 
-        return image, y, y_aux
+        # print(y)
+
+        # # Augment
+        # if self.transforms:
+        #     transformed = self.transforms(image=image)
+        #     image = transformed["image"]
+
+        # y = torch.from_numpy(self.targets[idx])
+
+        return image, y, 0
 
 
 class Seg3dDataset(Dataset):

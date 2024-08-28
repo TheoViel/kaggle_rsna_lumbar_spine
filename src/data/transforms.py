@@ -62,7 +62,15 @@ def distortion_transforms(p=0.5):
     )
 
 
-def get_transfos(augment=True, resize=None, crop=False, mean=0, std=1, strength=1):
+def get_transfos(
+    augment=True,
+    resize=None,
+    crop=False,
+    mean=0,
+    std=1,
+    strength=1,
+    use_keypoints=False,
+):
     """
     Returns transformations.
 
@@ -166,7 +174,24 @@ def get_transfos(augment=True, resize=None, crop=False, mean=0, std=1, strength=
                 blur_transforms(p=0.25),
                 distortion_transforms(p=0.5),
             ]
+        elif strength == 6:
+            augs = [
+                albu.ShiftScaleRotate(
+                    scale_limit=0.2,
+                    shift_limit=0.2,
+                    rotate_limit=10,
+                    p=0.75,
+                ),
+                color_transforms(p=0.25),
+                blur_transforms(p=0.25),
+            ]
     else:
         augs = []
 
-    return albu.Compose(augs + [normalizer])
+    keypoint_params = (
+        albu.KeypointParams(format="xy", remove_invisible=False)
+        if use_keypoints
+        else None
+    )
+
+    return albu.Compose(augs + [normalizer], keypoint_params=keypoint_params)

@@ -153,7 +153,12 @@ class ClsModel(nn.Module):
             else:
                 raise NotImplementedError
         elif pooling == "flatten":
-            self.nb_ft *= 49  # coat
+            if "224" in encoder.name or encoder.name == "coat_lite_medium":
+                self.nb_ft *= 49  # coat
+            elif "384" in encoder.name:
+                self.nb_ft *= 144
+            else:
+                raise NotImplementedError
 
         self.dropout = nn.Dropout(drop_rate) if drop_rate else nn.Identity()
 
