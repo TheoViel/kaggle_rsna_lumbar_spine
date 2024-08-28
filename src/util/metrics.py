@@ -45,10 +45,13 @@ def rsna_loss(truths, preds):
     preds = torch.from_numpy(preds).contiguous().float()
 
     # Compute individual losses
+    groups = [(0, 5), (5, 15), (15, 25)]
     losses = []
-    for i in range(truths.shape[1]):
-        p = preds[:, i][truths[:, i] > -1]
-        t = truths[:, i][truths[:, i] > -1]
+    for start, end in groups:
+        t = truths[:, start:end].flatten(0, 1)
+        p = preds[:, start:end].flatten(0, 1)
+        p = p[t > -1]
+        t = t[t > -1]
         w = 2 ** t
         loss = (loss_fct(p, t) * w).sum() / w.sum()
         losses.append(loss)
@@ -62,9 +65,7 @@ def rsna_loss(truths, preds):
     any_loss = ((any_w * any_loss).sum() / any_w.sum()).item()
 
     # Aggregate
-    loss_scs = np.mean(losses[:5])
-    loss_nfn = np.mean(losses[5:15])
-    loss_ss = np.mean(losses[15:25])
+    loss_scs, loss_nfn, loss_ss = losses
     avg_loss = np.mean([loss_scs,  loss_nfn,  loss_ss, any_loss])
 
     loss_dict = {

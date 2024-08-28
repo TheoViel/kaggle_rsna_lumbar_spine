@@ -50,7 +50,7 @@ def train(
         stride=config.stride,
         use_coords_crop=config.use_coords_crop,
         train=True,
-        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else True
+        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False
     )
 
     transfos = get_transfos(augment=False, resize=config.resize, crop=config.crop)
@@ -62,7 +62,7 @@ def train(
         n_frames=config.n_frames,
         stride=config.stride,
         train=False,
-        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else True
+        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False
     )
 
     if config.pretrained_weights is not None:

@@ -160,16 +160,16 @@ class StudyLoss(nn.Module):
 
         loss = self.ce(inputs.view(-1, 3), targets.view(-1)).view(bs, -1)
 
-        loss_scs, w_scs = loss[:, :5], w[:, :5]
-        loss_nfn, w_nfn = loss[:, 5:15], w[:, 5:15]
-        loss_ss, w_ss = loss[:, 15:], w[:, 15:]
+        loss_scs, w_scs = loss[:, :5].flatten(), w[:, :5].flatten()
+        loss_nfn, w_nfn = loss[:, 5:15].flatten(), w[:, 5:15].flatten()
+        loss_ss, w_ss = loss[:, 15:].flatten(), w[:, 15:].flatten()
 
-        loss_scs = (loss_scs * w_scs).sum(0) / w_scs.sum(0)
-        loss_nfn = (loss_nfn * w_nfn).sum(0) / w_nfn.sum(0)
-        loss_ss = (loss_ss * w_ss).sum(0) / w_ss.sum(0)
+        loss_scs = (loss_scs * w_scs).sum() / w_scs.sum()
+        loss_nfn = (loss_nfn * w_nfn).sum() / w_nfn.sum()
+        loss_ss = (loss_ss * w_ss).sum() / w_ss.sum()
 
         if not self.use_any:
-            return (loss_scs.mean() + loss_nfn.mean() + loss_ss.mean()) / 3
+            return (loss_scs + loss_nfn + loss_ss) / 3
 
         any_target = targets[:, :5].amax(1)
         any_pred = inputs[:, :5].softmax(-1)[:, :, 2].amax(1)
@@ -180,9 +180,9 @@ class StudyLoss(nn.Module):
         # print(any_target, any_pred)
 
         any_loss = - any_target * torch.log(any_pred) - (1 - any_target) * torch.log(1 - any_pred)
-        any_loss = (any_w * any_loss).sum(0) / any_w.sum(0)
+        any_loss = (any_w * any_loss).sum() / any_w.sum()
 
-        return (loss_scs.mean() + loss_nfn.mean() + loss_ss.mean() + any_loss) / 4
+        return (loss_scs + loss_nfn + loss_ss + any_loss) / 4
 
 
 class SpineLoss(nn.Module):
