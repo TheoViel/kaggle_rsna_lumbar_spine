@@ -87,4 +87,4 @@ def process_2(study, series, orient, data_path="", on_gpu=False):
         imgs = np.array(
             [cv2.resize(img, shape) if img.shape != shape else img for img in imgs]
         )
-    return imgs
+    return imgs, df
