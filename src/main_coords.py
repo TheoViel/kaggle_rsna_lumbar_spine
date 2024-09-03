@@ -102,7 +102,7 @@ class Config:
     # k-fold
     k = 4
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [0, 1, 2, 3]
+    selected_folds = [3]  # 0, 1, 2, 3]
 
     # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium maxvit_tiny_tf_384
     name = "coatnet_rmlp_2_rw_384"

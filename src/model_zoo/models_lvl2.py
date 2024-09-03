@@ -51,8 +51,113 @@ def define_model(
             num_classes_aux=num_classes_aux,
             n_fts=n_fts,
         )
+    elif name == "simple":
+        return SimpleModel(
+            ft_dim=ft_dim,
+            lstm_dim=layer_dim,
+            dense_dim=dense_dim,
+            resize=resize,
+            p=p,
+            num_classes=num_classes,
+            num_classes_aux=num_classes_aux,
+            n_fts=n_fts,
+        )
     else:
         raise NotImplementedError
+
+
+class SimpleModel(nn.Module):
+    def __init__(
+        self,
+        ft_dim=64,
+        lstm_dim=64,
+        resize=15,
+        dense_dim=64,
+        p=0.1,
+        num_classes=8,
+        num_classes_aux=0,
+        n_fts=0,
+    ):
+        """
+        Constructor.
+
+        Args:
+            ft_dim (int): The dimension of input features. Defaults to 64.
+            lstm_dim (int): The dimension of the LSTM layer. Defaults to 64.
+            n_lstm (int): The number of LSTM layers. Defaults to 1.
+            dense_dim (int): The dimension of the dense layer. Defaults to 64.
+            p (float): Dropout probability. Defaults to 0.1.
+            num_classes (int): The number of primary target classes. Defaults to 8.
+            num_classes_aux (int): The number of auxiliary target classes. Defaults to 0.
+            n_fts (int): The number of additional features. Defaults to 0.
+
+        """
+        super().__init__()
+        self.n_fts = n_fts
+        self.num_classes = num_classes
+        self.num_classes_aux = num_classes_aux
+
+        self.logits_nfn = nn.Sequential(
+            nn.Linear(ft_dim + 6, dense_dim),
+            nn.Dropout(p=p),
+            nn.Mish(),
+            nn.Linear(dense_dim, 3),
+        )
+
+        self.logits_scs = nn.Sequential(
+            nn.Linear(ft_dim + 6, dense_dim),
+            nn.Dropout(p=p),
+            nn.Mish(),
+            nn.Linear(dense_dim, 3),
+        )
+
+        self.logits_ss = nn.Sequential(
+            nn.Linear(ft_dim, dense_dim),
+            nn.Dropout(p=p),
+            nn.Mish(),
+            nn.Linear(dense_dim, 3),
+        )
+
+        # self.logits_nfn = nn.Linear(3, 3, bias=False)
+        # self.logits_nfn.weight = nn.Parameter(torch.eye(3))
+
+    def forward(self, x, ft=None):
+        """
+        Forward pass of the RNN with attention model.
+        """
+        ref_k = list(x.keys())[0]
+        bs = x[ref_k].size(0)
+
+        # print(fts.size())
+
+        logits = torch.zeros(bs, 25, 3).to(x[ref_k].device)
+
+        # fts = x["dd_v1"].view(bs, 25, 3)
+        # fts = x["crop"].view(bs, 25, 3)
+        fts = torch.cat([
+            x["dd_v1"].view(bs, 25, 3),
+            x["crop"].view(bs, 25, 3),
+        ], -1)
+
+        fts_scs = torch.cat([
+            fts[:, :5],
+            x["scs_crop_coords"].view(bs, -1, 3),
+            x["scs_crop"].view(bs, -1, 3),
+        ], -1)
+
+        fts_nfn = torch.cat([
+            fts[:, 5:15],
+            x["nfn_crop_coords"].view(bs, -1, 3),
+            x["nfn_crop"].view(bs, -1, 3),
+        ], -1)
+
+        logits[:, :5] = self.logits_scs(fts_scs)
+        logits[:, 5: 15] = self.logits_nfn(fts_nfn)
+        logits[:, 15:] = self.logits_ss(fts[:, 15:])
+
+        # logits[:, 5: 15] = self.logits_nfn(x["nfn_crop_coords"].view(bs, 10, 3))
+
+        return logits, torch.zeros(bs)
 
 
 class BaselineModel(nn.Module):
@@ -107,7 +212,10 @@ class BaselineModel(nn.Module):
             self.crop_mlp = nn.Sequential(
                 nn.Linear(n_fts, dense_dim),
                 nn.Dropout(p=p),
-                nn.Mish()
+                nn.Mish(),
+                # nn.Linear(dense_dim, dense_dim),
+                # nn.Dropout(p=p),
+                # nn.Mish(),
             )
 
         self.logits = nn.Sequential(
@@ -121,8 +229,9 @@ class BaselineModel(nn.Module):
         """
         Forward pass of the RNN with attention model.
         """
-        bs = x['crop'].size(0)
-        fts = torch.empty((bs, 0)).to(x['crop'].device)
+        ref_k = list(x.keys())[0]
+        bs = x[ref_k].size(0)
+        fts = torch.empty((bs, 0)).to(x[ref_k].device)
 
         # print(fts.size())
 
@@ -139,7 +248,7 @@ class BaselineModel(nn.Module):
         # print(fts.size())
 
         if self.crop_mlp is not None:
-            crop_fts = torch.cat([x[k] for k in x if "crop" in k], 1)
+            crop_fts = torch.cat([x[k] for k in x if "crop" in k or "dd" in k], 1)
             crop_fts = self.crop_mlp(crop_fts)
             fts = torch.cat([fts, crop_fts], 1)
 

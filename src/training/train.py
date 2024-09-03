@@ -192,7 +192,7 @@ def fit(
                 if data_config["sched"]
                 else data_config["mix_proba"]
             )
-            skip_mix = (y.min() == -1) or (len(y.squeeze().size()) > 1 and y.sum(-1).min() > 0)
+            skip_mix = (y.min() == -1) or (len(y.squeeze().size()) > 2 and y.sum(-1).min() <= 0)
             if np.random.random() < mix_p and not skip_mix:
                 x, y, y_aux, _ = mix(x, y, y_aux)
 

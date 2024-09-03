@@ -333,39 +333,6 @@ class ClsModel(nn.Module):
 
         return x
 
-    def forward_from_features(self, fts):
-        """
-        Forward function using pre-extracted features.
-
-        Args:
-            fts (torch.Tensor): Features of shape [batch_size x n_frames x num_features].
-
-        Returns:
-            torch.Tensor: Logits for the primary classes of shape [batch_size x num_classes].
-        """
-        fts = self.dropout(fts)
-
-        if self.head_3d:
-            fts = self.forward_head_3d(fts)
-
-        logits, logits_aux = self.get_logits(fts)
-
-        return logits
-
-    def set_mode(self, mode):
-        """
-        Set the forward mode (features or images).
-
-        Args:
-            mode (str): The mode to set, "ft" for features or "img" for images.
-        """
-        if mode == "ft":
-            self.forward = lambda x: self.forward_from_features(x)
-        elif mode == "img":
-            self.forward = lambda x: self.extract_features(x)
-        else:
-            raise NotImplementedError
-
     def forward(self, x, return_fts=False):
         """
         Forward function for the model.

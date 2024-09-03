@@ -154,7 +154,7 @@ class StudyLoss(nn.Module):
         assert (targets.size(1) == 25) and (len(targets.size()) == 2), "Wrong target size"
         assert (inputs.size(1) == 25) and (len(inputs.size()) == 3), "Wrong input size"
         bs = targets.size(0)
-        w = torch.pow(2, targets) if self.weighted else 1
+        w = torch.pow(2, targets) if self.weighted else torch.ones_like(targets)
 
         # print(inputs.view(-1, 3))
 

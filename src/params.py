@@ -12,7 +12,18 @@ MODES = {"T2_Sagittal": "scs", "T1_Sagittal": "nfn", "T2_Axial": "ss"}
 
 SEVERITIES = ["Normal/Mild", "Moderate", "Severe"]
 
-CLASSES_SEG = ['L1', 'L2', 'L3', 'L4', 'L5', 'L1/L2', 'L2/L3',  'L3/L4', 'L4/L5', 'L5/S1']
+CLASSES_SEG = [
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "L1/L2",
+    "L2/L3",
+    "L3/L4",
+    "L4/L5",
+    "L5/S1",
+]
 
 CLASSES_SCS = [
     "spinal_canal_stenosis_l1_l2",
@@ -69,7 +80,17 @@ CLASSES_CROP = [
     "right_subarticular_stenosis",
 ]
 
-LEVELS = ['L1/L2', 'L2/L3', 'L3/L4', 'L4/L5', 'L5/S1']
-LEVELS_ = ['l1_l2', 'l2_l3', 'l3_l4', 'l4_l5', 'l5_s1']
+LEVELS = ["L1/L2", "L2/L3", "L3/L4", "L4/L5", "L5/S1"]
+LEVELS_ = ["l1_l2", "l2_l3", "l3_l4", "l4_l5", "l5_s1"]
 
 CLASSES = CLASSES_SCS + CLASSES_NFN + CLASSES_SS
+
+NOISY_SERIES = [
+    1518511736,
+    2278678071,
+    3230157587,
+    1032434193,
+    692927423,
+    3802667261,
+    856763877,
+]

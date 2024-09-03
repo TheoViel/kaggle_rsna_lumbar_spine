@@ -7,11 +7,13 @@ from torch.nn.parallel import DistributedDataParallel
 
 from training.train import fit
 from model_zoo.models import define_model
+from model_zoo.models_bi import define_model_bi
 
-from data.dataset import CropDataset, ImageDataset, CoordsDataset
+from data.dataset import CropDataset, ImageDataset, CoordsDataset, CropSagAxDataset
 from data.transforms import get_transfos
 
 from util.torch import seed_everything, count_parameters, save_model_weights
+from params import NOISY_SERIES
 
 
 def train(config, df_train, df_val, fold, log_folder=None, run=None):
@@ -30,7 +32,10 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         tuple: A tuple containing predictions and metrics.
     """
     if "crop" in config.pipe:
-        dataset_class = CropDataset
+        if "bi" in config.pipe:
+            dataset_class = CropSagAxDataset
+        else:
+            dataset_class = CropDataset
     elif "coord" in config.pipe:
         dataset_class = CoordsDataset
     else:
@@ -67,6 +72,7 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         frames_chanel=config.frames_chanel,
         n_frames=config.n_frames,
         stride=config.stride,
+        use_coords_crop=config.use_coords_crop,
         train=False,
         load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
     )
@@ -83,7 +89,8 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
     else:
         pretrained_weights = None
 
-    model = define_model(
+    model_fct = define_model_bi if "bi" in config.pipe else define_model
+    model = model_fct(
         config.name,
         drop_rate=config.drop_rate,
         drop_path_rate=config.drop_path_rate,
@@ -178,6 +185,11 @@ def k_fold(config, df, log_folder=None, run=None):
             df_train = df[df["fold"] != fold].reset_index(drop=True)
             df_val = df[df["fold"] == fold].reset_index(drop=True)
 
+            if hasattr(config, "remove_noisy"):
+                if config.remove_noisy:
+                    df_train = df_train[~df_train['series_id'].isin(NOISY_SERIES)]
+                    df_train = df_train.reset_index(drop=True)
+
             # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
 
             # df_train = df_val.copy()
@@ -201,7 +213,7 @@ def k_fold(config, df, log_folder=None, run=None):
                 np.save(log_folder + f"pred_val_{fold}", preds)
                 df_val.to_csv(log_folder + f"df_val_{fold}.csv", index=False)
 
-    if config.local_rank == 0:
+    if config.local_rank == 0 and len(config.selected_folds):
         print("\n-------------   CV Scores  -------------\n")
 
         for k in all_metrics[0].keys():
@@ -216,7 +228,7 @@ def k_fold(config, df, log_folder=None, run=None):
         np.save(log_folder + f"pred_val_{fold}", preds)
         df_val.to_csv(log_folder + f"df_val_{fold}.csv", index=False)
 
-    if config.fullfit and len(config.selected_folds) == 4:
+    if config.fullfit and config.selected_folds != [0]:
         for ff in range(config.n_fullfit):
             if config.local_rank == 0:
                 print(

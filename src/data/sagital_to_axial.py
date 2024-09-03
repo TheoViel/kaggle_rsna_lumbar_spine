@@ -1,97 +1,5 @@
-import glob
-import pydicom
 import numpy as np
-import pandas as pd
-from natsort import natsorted
-
-
-class dotdict(dict):
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError(name)
-
-
-def np_dot(a, b):
-    return np.sum(a * b, 1)
-
-
-def read_series_metadata(
-    study_id,
-    series_id,
-    series_description,
-    data_path="../input/train_images/",
-    advanced_sorting=True,
-):
-    dicom_dir = data_path + f"{study_id}/{series_id}"
-
-    # read dicom file
-    dicom_file = natsorted(glob.glob(f"{dicom_dir}/*.dcm"))
-    instance_number = [int(f.split("/")[-1].split(".")[0]) for f in dicom_file]
-    dicom = [pydicom.dcmread(f, stop_before_pixels=True) for f in dicom_file]
-
-    # make dicom header df
-    dicom_df = []
-    for i, d in zip(instance_number, dicom):  # d__.dict__
-        dicom_df.append(
-            dotdict(
-                study_id=study_id,
-                series_id=series_id,
-                series_description=series_description,
-                instance_number=i,
-                ImagePositionPatient=[float(v) for v in d.ImagePositionPatient],
-                ImageOrientationPatient=[float(v) for v in d.ImageOrientationPatient],
-                PixelSpacing=[float(v) for v in d.PixelSpacing],
-                SpacingBetweenSlices=float(d.SpacingBetweenSlices),
-                SliceThickness=float(d.SliceThickness),
-                grouping=str([round(float(v), 3) for v in d.ImageOrientationPatient]),
-            )
-        )
-    dicom_df = pd.DataFrame(dicom_df)
-
-    # Sort slices
-    if advanced_sorting:
-        # First cluster by orientation
-        dicom_df = [d for _, d in dicom_df.groupby("grouping")]
-
-        # Sort inside each cluster by projection
-        data = []
-        sort_data_by_group = []
-        for df in dicom_df:
-            position = np.array(df["ImagePositionPatient"].values.tolist())
-            orientation = np.array(df["ImageOrientationPatient"].values.tolist())
-            normal = np.cross(orientation[:, :3], orientation[:, 3:])
-            projection = np_dot(normal, position)
-
-            df.loc[:, "projection"] = projection
-            df = df.sort_values("projection")
-            data.append(dotdict(df=df))
-
-            if "sagittal" in series_description.lower():
-                sort_data_by_group.append(position[0, 0])  # x
-            if "axial" in series_description.lower():
-                sort_data_by_group.append(position[0, 2])  # z
-
-        # Sort clusters by position
-        data = [r for _, r in sorted(zip(sort_data_by_group, data))]
-        for i, r in enumerate(data):
-            r.df.loc[:, "group"] = i
-
-        df = pd.concat([r.df for r in data])
-
-    else:  # Sort by z
-        if "sagittal" in series_description.lower():
-            dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(lambda x: x[0])
-        if "axial" in series_description.lower():
-            dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(lambda x: x[2])
-        df = dicom_df.sort_values("order", ignore_index=True)
-
-    df.loc[:, "z"] = np.arange(len(df))
-    return df.reset_index(drop=True)
+from data.processing import read_series_metadata
 
 
 def project_to_3d(x, y, z, df):
@@ -224,8 +132,13 @@ def get_axial_coords(
     data_path="../input/train_images/",
     world_point=None,
 ):
-    df_sagittal = read_series_metadata(
-        study, series, "sagittal", data_path=data_path, advanced_sorting=False
+    df_sagittal, _ = read_series_metadata(
+        study,
+        series,
+        "sagittal",
+        data_path=data_path,
+        advanced_sorting=False,
+        return_imgs=False,
     )
 
     coords[:, 0] *= w
@@ -233,7 +146,7 @@ def get_axial_coords(
 
     df_s = df[df["study_id"] == study]
 
-    df_axial = read_series_metadata(
+    df_axial, _ = read_series_metadata(
         study,
         df_s[df_s["orient"] == "Axial"].series_id.values[0],
         "axial",

@@ -10,7 +10,7 @@ from util.logger import (
     create_logger,
     save_config,
     prepare_log_folder,
-    # init_neptune,
+    init_neptune,
     get_last_log_folder,
 )
 
@@ -91,7 +91,7 @@ class Config:
     frames_chanel = 1
     n_frames = 1
     stride = 1
-    aug_strength = 0
+    aug_strength = 6
     crop = False
 
     use_coords_crop = False
@@ -100,7 +100,7 @@ class Config:
 
     # k-fold
     k = 4
-    folds_file = f"../input/folds_{k}.csv"
+    folds_file = "../input/train_folded_v1.csv"
     selected_folds = [0, 1, 2, 3]
 
     # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium maxvit_tiny_tf_384
@@ -151,7 +151,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 30
+    epochs = 50
 
     use_fp16 = True
     verbose = 1
@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
     run = None
     if config.local_rank == 0:
-        # run = init_neptune(config, log_folder)
+        run = init_neptune(config, log_folder)
 
         if args.fold > -1:
             config.selected_folds = [args.fold]

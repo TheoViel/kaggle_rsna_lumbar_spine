@@ -33,6 +33,12 @@ class Mixup(nn.Module):
             torch.Tensor: Mixed target labels for the main task.
             torch.Tensor: Mixed target labels for the auxiliary task.
         """
+        if isinstance(x, dict):
+            keys = list(x.keys())
+            x, x_aux = x[keys[0]], x[keys[1]]
+        else:
+            x_aux = None
+
         bs = x.shape[0]
         n_dims = len(x.shape)
         device = x.device
@@ -67,6 +73,23 @@ class Mixup(nn.Module):
                 coeffs.view(-1, 1, 1, 1, 1) * x
                 + (1 - coeffs.view(-1, 1, 1, 1, 1)) * x[perm]
             )
+
+        if x_aux is not None:
+            if n_dims == 2:
+                x_aux = coeffs.view(-1, 1) * x_aux + (1 - coeffs.view(-1, 1)) * x_aux[perm]
+            elif n_dims == 3:
+                x_aux = coeffs.view(-1, 1, 1) * x_aux + (1 - coeffs.view(-1, 1, 1)) * x_aux[perm]
+            elif n_dims == 4:
+                x_aux = (
+                    coeffs.view(-1, 1, 1, 1) * x_aux +
+                    (1 - coeffs.view(-1, 1, 1, 1)) * x_aux[perm]
+                )
+            else:
+                x_aux = (
+                    coeffs.view(-1, 1, 1, 1, 1) * x_aux
+                    + (1 - coeffs.view(-1, 1, 1, 1, 1)) * x_aux[perm]
+                )
+            x = dict(zip(keys, [x, x_aux]))
 
         if self.additive:
             y = torch.cat([y.unsqueeze(0), y[perm].unsqueeze(0)], 0).amax(0)

@@ -9,8 +9,10 @@ from data.transforms import get_transfos
 from torch.utils.data import DataLoader
 
 from inference.dataset import ImageInfDataset
-from data.dataset import CropDataset
+from data.dataset import CropDataset, CropSagAxDataset
 from model_zoo.models import define_model
+from model_zoo.models_bi import define_model_bi
+
 from util.torch import load_model_weights
 from util.metrics import disk_auc
 from params import LEVELS_
@@ -55,14 +57,14 @@ def predict(
                 y_pred, y_pred_aux = model(x)
 
             # Get probabilities
-            if loss_config["activation"] == "sigmoid":
-                y_pred = y_pred.sigmoid()
-            elif loss_config["activation"] == "softmax":
-                y_pred = y_pred.softmax(-1)
-            elif loss_config["activation"] in ["series", "study"]:
-                y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
-            else:
-                raise NotImplementedError
+            # if loss_config["activation"] == "sigmoid":
+            #     y_pred = y_pred.sigmoid()
+            # elif loss_config["activation"] == "softmax":
+            #     y_pred = y_pred.softmax(-1)
+            if loss_config["activation"] in ["series", "study"]:
+                y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
+            # else:
+            #     pass
 
             preds.append(y_pred.detach().cpu().numpy())
             preds_aux.append(y_pred_aux.detach().cpu().numpy())
@@ -130,7 +132,8 @@ def kfold_inference(
         if config.local_rank == 0 and not distributed:
             print(f"\n- Fold {fold + 1}")
 
-        model = define_model(
+        model_fct = define_model_bi if "bi" in config.pipe else define_model
+        model = model_fct(
             config.name,
             drop_rate=config.drop_rate,
             drop_path_rate=config.drop_path_rate,
@@ -288,13 +291,15 @@ def kfold_inference_crop(
             crop=config.crop,
         )
 
-        dataset = CropDataset(
+        dataset_class = CropSagAxDataset if "bi" in config.pipe else CropDataset
+        dataset = dataset_class(
             df_val,
             targets=config.targets,
             transforms=transforms,
             frames_chanel=config.frames_chanel if hasattr(config, "frames_chanel") else 0,
             n_frames=config.n_frames if hasattr(config, "n_frames") else 1,
             stride=config.stride if hasattr(config, "stride") else 1,
+            use_coords_crop=config.use_coords_crop,
             train=False,
             load_in_ram=False,
         )
@@ -312,7 +317,7 @@ def kfold_inference_crop(
             np.save(exp_folder + f"pred_inf_{fold}.npy", preds)
             np.save(exp_folder + f"pred_inf_aux_{fold}.npy", preds)
 
-        preds = np.array(preds)
+        # preds = np.array(preds)
 
         if isinstance(df_val["target"].values[0], list):
             y = np.vstack(df_val["target"].values)

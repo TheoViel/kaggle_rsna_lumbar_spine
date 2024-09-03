@@ -86,15 +86,21 @@ class Config:
     targets = "target"
 
     # Data
-    # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/coords_crops_0.15_/"
+    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/coords_crops_0.1_f/"
+    # crop_folder = "../input/coords_crops_0.1_2/"
+    # crop_folder = "../input/coords_crops_0.15_2/"
     resize = (224, 224)
+
     frames_chanel = 1
-    n_frames = 5
+    n_frames = 5  # 1
     stride = 1
     aug_strength = 3
+
     crop = False
-    use_coords_crop = False
+    load_in_ram = False  # True
+    use_coords_crop = False  # True
+    remove_noisy = False  # True
 
     # k-fold
     k = 4
@@ -154,7 +160,7 @@ class Config:
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = True
+    fullfit = False
     n_fullfit = 1
 
 
@@ -230,9 +236,10 @@ if __name__ == "__main__":
     df = prepare_data_nfn(DATA_PATH, crop_folder=config.crop_folder)
 
     from training.main import k_fold
-    k_fold(config, df, log_folder=log_folder, run=run)
+    # k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
+        log_folder = "../logs/2024-08-29/16/"
         if config.local_rank == 0:
             print("\n -> Inference\n")
 

@@ -56,7 +56,7 @@ def get_target(row):
         return np.nan
 
 
-def prepare_data_scs(data_path="../input", crop_folder=None, explode=True):
+def prepare_data_scs(data_path="../input/", crop_folder=None, explode=True):
     df = prepare_data(data_path)
     df = df[df["weighting"] == "T2/STIR"].reset_index(drop=True)
     # df = df[df["weighting"] == "T1"].reset_index(drop=True)
@@ -136,9 +136,17 @@ def split_left_right(df):
     return df
 
 
-def prepare_data_nfn(data_path="../input", crop_folder=None, explode=True, left_right=False):
+def prepare_data_nfn(data_path="../input/", crop_folder=None, explode=True, left_right=False):
     df = prepare_data(data_path)
     df = df[df["weighting"] == "T1"].reset_index(drop=True)
+
+    df_dummy = df.copy()
+    df_dummy['condition'] = [
+        ['Right Neural Foraminal Narrowing'] * 5 + ['Left Neural Foraminal Narrowing'] * 5
+        for _ in range(len(df))
+    ]
+    df_dummy['level'] = [LEVELS * 2 for _ in range(len(df))]
+    df_dummy['coords'] = [np.zeros((3)).tolist() for _ in range(len(df))]
 
     # Add train data
     df_train = pd.read_csv(data_path + "train.csv")
@@ -148,13 +156,27 @@ def prepare_data_nfn(data_path="../input", crop_folder=None, explode=True, left_
         df_train[c] = df_train[c].map(dict(zip(SEVERITIES, [0, 1, 2]))).fillna(-1)
     df_train = df_train.astype(int)
     df = df.merge(df_train, on="study_id", how="left")
+    df_dummy = df_dummy.merge(df_train, on="study_id", how="left")
 
     # To disk level
     if explode:
         df = df.explode(["condition", "level", "coords"]).dropna().reset_index(drop=True)
+
+        # Missing
+        df_dummy = df_dummy.explode(["condition", "level"]).reset_index(drop=True)
+        df = pd.concat([df, df_dummy]).drop_duplicates(
+            subset=["study_id", "series_id", "level", "condition"], keep="first"
+        ).reset_index(drop=True)
+        df = df.sort_values(["study_id", "series_id", "condition", "level"], ignore_index=True)
+
         df["side"] = df["condition"].apply(lambda x: x.split()[0])
+        df = df[df['side'] != "Spinal"].reset_index(drop=True)
+
         df["target"] = df.apply(get_target, axis=1)
         df.drop(CLASSES_NFN, axis=1, inplace=True)
+
+        # print(len(df))
+        # return df
 
         if crop_folder is not None:
             df["img_path"] = df["study_id"].astype(str) + "_" + df["series_id"].astype(str)
@@ -389,7 +411,12 @@ def prepare_coords_data(data_path="../input/coords/", axial=False, use_ext=False
         df = pd.read_csv(data_path + 'coords_ax.csv')
         df = df.groupby(['study_id', 'series_id', "img_path"]).agg(list).reset_index()
 
-        df['target'] = df.apply(lambda x: get_coords_target(x, True), axis=1).tolist()
+        df['target'] = df.apply(
+            lambda x: get_coords_target(x, axial=True, relative=False), axis=1
+        ).tolist()
+        df['target_rel'] = df.apply(
+            lambda x: get_coords_target(x, axial=True, relative=True), axis=1
+        ).tolist()
     else:
         if use_ext:
             df = pd.read_csv(data_path + "coords_pretrain.csv")
