@@ -29,55 +29,27 @@ def define_model(
     Returns:
         nn.Module: The defined model.
     """
-    if name == "rnn_att":
-        return RNNAttModel(
-            ft_dim=ft_dim,
-            lstm_dim=layer_dim,
-            dense_dim=dense_dim,
-            resize=resize,
-            p=p,
-            num_classes=num_classes,
-            num_classes_aux=num_classes_aux,
-            n_fts=n_fts,
-        )
-    elif name == "baseline":
-        return BaselineModel(
-            ft_dim=ft_dim,
-            lstm_dim=layer_dim,
-            dense_dim=dense_dim,
-            resize=resize,
-            p=p,
-            num_classes=num_classes,
-            num_classes_aux=num_classes_aux,
-            n_fts=n_fts,
-        )
-    elif name == "simple":
-        return SimpleModel(
-            ft_dim=ft_dim,
-            lstm_dim=layer_dim,
-            dense_dim=dense_dim,
-            resize=resize,
-            p=p,
-            num_classes=num_classes,
-            num_classes_aux=num_classes_aux,
-            n_fts=n_fts,
-        )
-    else:
-        raise NotImplementedError
+    model_classes = {
+        "baseline": BaselineModel,
+        "rnn_att": RNNAttModel,
+        "simple": SimpleModel,
+    }
+    model_class = model_classes[name]
+
+    return model_class(
+        ft_dim=ft_dim,
+        lstm_dim=layer_dim,
+        dense_dim=dense_dim,
+        resize=resize,
+        p=p,
+        num_classes=num_classes,
+        num_classes_aux=num_classes_aux,
+        n_fts=n_fts,
+    )
 
 
 class SimpleModel(nn.Module):
-    def __init__(
-        self,
-        ft_dim=64,
-        lstm_dim=64,
-        resize=15,
-        dense_dim=64,
-        p=0.1,
-        num_classes=8,
-        num_classes_aux=0,
-        n_fts=0,
-    ):
+    def __init__(self, ft_dim=64, dense_dim=64, p=0.0, n_fts=0, **kwargs):
         """
         Constructor.
 
@@ -94,32 +66,29 @@ class SimpleModel(nn.Module):
         """
         super().__init__()
         self.n_fts = n_fts
-        self.num_classes = num_classes
-        self.num_classes_aux = num_classes_aux
+        self.num_classes = 3
+        self.num_classes_aux = 0
 
-        self.logits_nfn = nn.Sequential(
-            nn.Linear(ft_dim + 6, dense_dim),
+        self.logits_scs = nn.Sequential(
+            nn.Linear(ft_dim[0], dense_dim),
             nn.Dropout(p=p),
-            nn.Mish(),
+            nn.LeakyReLU(0.05),
             nn.Linear(dense_dim, 3),
         )
 
-        self.logits_scs = nn.Sequential(
-            nn.Linear(ft_dim + 6, dense_dim),
+        self.logits_nfn = nn.Sequential(
+            nn.Linear(ft_dim[1], dense_dim),
             nn.Dropout(p=p),
-            nn.Mish(),
+            nn.LeakyReLU(0.05),
             nn.Linear(dense_dim, 3),
         )
 
         self.logits_ss = nn.Sequential(
-            nn.Linear(ft_dim, dense_dim),
+            nn.Linear(ft_dim[2], dense_dim),
             nn.Dropout(p=p),
-            nn.Mish(),
+            nn.LeakyReLU(0.05),
             nn.Linear(dense_dim, 3),
         )
-
-        # self.logits_nfn = nn.Linear(3, 3, bias=False)
-        # self.logits_nfn.weight = nn.Parameter(torch.eye(3))
 
     def forward(self, x, ft=None):
         """
@@ -134,26 +103,30 @@ class SimpleModel(nn.Module):
 
         # fts = x["dd_v1"].view(bs, 25, 3)
         # fts = x["crop"].view(bs, 25, 3)
-        fts = torch.cat([
-            x["dd_v1"].view(bs, 25, 3),
-            x["crop"].view(bs, 25, 3),
-        ], -1)
+        fts = torch.cat(
+            [
+                x[k].view(bs, 25, -1)
+                for k in x.keys()
+                if not any([s in k for s in ["scs", "nfn", "ss"]])
+            ],
+            -1,
+        )
 
-        fts_scs = torch.cat([
-            fts[:, :5],
-            x["scs_crop_coords"].view(bs, -1, 3),
-            x["scs_crop"].view(bs, -1, 3),
-        ], -1)
+        fts_scs = torch.cat(
+            [fts[:, :5]] + [x[k].view(bs, -1, 3) for k in x.keys() if "scs" in k], -1
+        )
 
-        fts_nfn = torch.cat([
-            fts[:, 5:15],
-            x["nfn_crop_coords"].view(bs, -1, 3),
-            x["nfn_crop"].view(bs, -1, 3),
-        ], -1)
+        fts_nfn = torch.cat(
+            [fts[:, 5:15]] + [x[k].view(bs, -1, 3) for k in x.keys() if "nfn" in k], -1
+        )
+
+        fts_ss = torch.cat(
+            [fts[:, 15:]] + [x[k].view(bs, -1, 3) for k in x.keys() if "ss" in k], -1
+        )
 
         logits[:, :5] = self.logits_scs(fts_scs)
-        logits[:, 5: 15] = self.logits_nfn(fts_nfn)
-        logits[:, 15:] = self.logits_ss(fts[:, 15:])
+        logits[:, 5:15] = self.logits_nfn(fts_nfn)
+        logits[:, 15:] = self.logits_ss(fts_ss)
 
         # logits[:, 5: 15] = self.logits_nfn(x["nfn_crop_coords"].view(bs, 10, 3))
 
@@ -191,19 +164,25 @@ class BaselineModel(nn.Module):
         self.num_classes = num_classes
         self.num_classes_aux = num_classes_aux
 
-        logits_fts = 0   # 36 * 2  # Mean & max pool scs/ss/nfn
+        logits_fts = 0  # 36 * 2  # Mean & max pool scs/ss/nfn
 
         self.lstms, self.mlps = {}, {}
         if lstm_dim:
-            self.mlps = nn.ModuleDict({
-                "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-                "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-                "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
-            })
-            self.lstms = nn.ModuleDict({
-                k: nn.LSTM(dense_dim, lstm_dim, batch_first=True, bidirectional=True)
-                for k in ['nfn', 'scs', "ss"]
-            })
+            self.mlps = nn.ModuleDict(
+                {
+                    "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
+                    "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
+                    "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
+                }
+            )
+            self.lstms = nn.ModuleDict(
+                {
+                    k: nn.LSTM(
+                        dense_dim, lstm_dim, batch_first=True, bidirectional=True
+                    )
+                    for k in ["nfn", "scs", "ss"]
+                }
+            )
             logits_fts += 4 * lstm_dim * 2 * resize
 
         self.crop_mlp = None
@@ -288,16 +267,20 @@ class RNNAttModel(nn.Module):
         self.num_classes = num_classes
         self.num_classes_aux = num_classes_aux
 
-        self.mlps = nn.ModuleDict({
-            "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-            "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-            "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
-        })
+        self.mlps = nn.ModuleDict(
+            {
+                "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
+                "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
+                "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
+            }
+        )
 
-        self.lstms = nn.ModuleDict({
-            k: nn.LSTM(dense_dim, lstm_dim, batch_first=True, bidirectional=True)
-            for k in ['nfn', 'scs', "ss"]
-        })
+        self.lstms = nn.ModuleDict(
+            {
+                k: nn.LSTM(dense_dim, lstm_dim, batch_first=True, bidirectional=True)
+                for k in ["nfn", "scs", "ss"]
+            }
+        )
 
         if n_fts > 0:  # TODO - non-rnn fts
             self.mlp_fts = nn.Sequential(
@@ -362,7 +345,7 @@ class RNNAttModel(nn.Module):
         """
         Forward pass of the RNN with attention model.
         """
-        bs = x['ss'].size(0)
+        bs = x["ss"].size(0)
 
         fts = {}
         for k in self.mlps:
@@ -378,8 +361,8 @@ class RNNAttModel(nn.Module):
             # elif k == "ss":
             fts[k] = features_lstm.reshape(bs, -1)
 
-        scs_fts = torch.cat([fts['scs'], x["scs_crop"]], 1)
-        nfn_fts = torch.cat([fts['nfn'], x["nfn_crop"]], 1)
+        scs_fts = torch.cat([fts["scs"], x["scs_crop"]], 1)
+        nfn_fts = torch.cat([fts["nfn"], x["nfn_crop"]], 1)
 
         # scs_fts = torch.cat([fts['scs'].mean(1), fts['scs'].amax(1), x["scs_crop"]], 1)
         # nfn_fts = torch.cat([
@@ -394,7 +377,7 @@ class RNNAttModel(nn.Module):
 
         logits_scs = self.logits_scs(scs_fts)  # .view(bs, -1, 3)
         logits_nfn = self.logits_nfn(nfn_fts)  # .view(bs, -1, 3)
-        logits_ss = self.logits_ss(fts['ss'])  # .view(bs, -1, 3)
+        logits_ss = self.logits_ss(fts["ss"])  # .view(bs, -1, 3)
 
         logits = torch.cat([logits_scs, logits_nfn, logits_ss], 1)
         logits = self.logits(logits).view(bs, -1, 3)

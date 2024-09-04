@@ -1,4 +1,3 @@
-import os
 import cv2
 import torch
 import numpy as np
@@ -681,58 +680,43 @@ class FeatureDataset(Dataset):
 
         self.series_dict = self.get_series_dict(df)
 
-        self.sizes = {
-            "nfn": resize,
-            "scs": resize,
-            "ss": resize * 2,
-            "ss_aux": resize * 2,
+        self.dummies = {
+            "scs_crop": np.zeros(3),
+            "nfn_crop": np.zeros(3),
+            "crop": np.zeros((5, 3)),
+            "dh": np.zeros((25, 3)),
+            "ch": np.zeros((25, 3)),
         }
 
-        self.dummies = {}
         self.fts = {}
-
-        study = self.df["study_id"][0]
-        series = self.series_dict[study]
-
         for k in self.exp_folders:
             if "crop" in k:
                 self.fts[k] = self.load_fts(self.exp_folders[k])
-            elif "dd" in k:
+            elif ("dh" in k) or ("ch" in k):
                 file = torch.load(self.exp_folders[k])
                 self.fts[k] = dict(zip(
                     file["study_id"].tolist(),
-                    file['logits'].cpu().numpy(),
+                    file['logits'].float().cpu().numpy(),
                 ))
-            else:
-                self.dummies[k] = 0.33 + np.zeros_like(
-                    np.load(self.exp_folders[k] + f'preds/{study}_{series[k.split("_")[0]]}.npy')
-                )
 
     @staticmethod
     def get_series_dict(df):
         series_dict = defaultdict(dict)
+        df = df[['series_id', 'series_description', "study_id"]]
         for study, df_study in df.explode(['series_id', 'series_description']).groupby("study_id"):
-            series = df_study.set_index("series_description")["series_id"]
-            try:
-                series_dict[study]["scs"] = series["Sagittal T2/STIR"]
-            except KeyError:
-                series_dict[study]["scs"] = 0
+            series = df_study[
+                ["series_id", "series_description"]
+            ].groupby("series_description").agg(list)
+            series = series['series_id'].to_dict()
 
-            try:
-                series_dict[study]["nfn"] = series["Sagittal T1"]
-            except KeyError:
-                series_dict[study]["nfn"] = 0
-                # print(study, "nfn")
+            series_dict[study]["scs"] = series.get("Sagittal T2/STIR", [])
+            series_dict[study]["nfn"] = series.get("Sagittal T1", [])
+            series_dict[study]["ss"] = series.get("Axial T2", [])
 
-            try:
-                series_dict[study]["ss"] = series["Axial T2"]
-            except KeyError:
-                series_dict[study]["ss"] = 0
-
-            for k in series_dict[study]:
-                if not isinstance(series_dict[study][k], int):
-                    series_dict[study][k] = series_dict[study][k].values[0]
-
+            # if series_dict[study]["nfn"] is None:
+            #     series_dict[study]["nfn"] = series_dict[study].get("scs", [])
+            # if series_dict[study]["scs"] is None:
+            #     series_dict[study]["scs"] = series_dict[study].get("nfn", [])
         return series_dict
 
     def __len__(self):
@@ -768,48 +752,44 @@ class FeatureDataset(Dataset):
         series = self.series_dict[study]
 
         fts = {}
-        for k in self.exp_folders:
-            series_k = k.split("_")[0]
-            series_k = [series_k] if series_k in ["ss", "nfn", "scs"] else ["ss", "nfn", "scs"]
-            # print(series_k)
-            if "crop" in k:
-                sides = ["Left", "Right"] if "nfn" in k or "ss" in k else ['Center']
-                ft = []
+        for exp in self.exp_folders:
+            series_k = exp.split("_")[0]
+            series_k = [series_k] if series_k in ["ss", "nfn", "scs"] else ["nfn", "scs"]  # "ss"
+
+            if "crop" in exp:
+                sides = ["Left", "Right"] if "nfn" in exp or "ss" in exp else ['Center']
+                ft = defaultdict(list)
                 for lvl in LEVELS:
                     for side in sides:
-                        ft_ = []
                         for sk in series_k:
-                            ft_k = f'{study}_{series[sk]}_{lvl}_{side}'
-                            if ft_k in self.fts[k]:
-                                ft_.append(self.fts[k][ft_k])
-                        if len(ft_):
-                            ft.append(np.mean(ft_, 0))
-                        else:
-                            ft.append(np.zeros(3) if "crop" in k else np.zeros(25))
-                ft = np.vstack(ft)
-                ft = ft.reshape(5, -1, 3).transpose(1, 0, 2).reshape(-1, 3)
+                            ft_ = []
+                            for s in series[sk]:
+                                ft_k = f'{study}_{s}_{lvl}_{side}'
+                                try:
+                                    ft_.append(self.fts[exp][ft_k])
+                                except KeyError:
+                                    # print(exp, sk, ft_k, "missing")
+                                    pass
+                            ft_ = np.mean(ft_, 0) if len(ft_) else self.dummies[exp[:8]]
+                            ft[f"{lvl}_{side}"].append(ft_)
+                ft_ = []
+                for k in ft.keys():
+                    try:
+                        ft_.append(np.concatenate(ft[k], -1))
+                    except ValueError:
+                        print([x.shape for x in ft[k]])
+                ft = np.vstack(ft_)
+
+                # Put in the right order
+                ft = ft.reshape(5, -1, ft.shape[-1]).transpose(1, 0, 2).reshape(-1, ft.shape[-1])
                 if not ("scs" in k or "nfn" in k or "ss" in k):
                     ft[5:15] = np.concatenate([ft[10:15], ft[5:10]], 0)  # Right then left
                     ft[15:25] = np.concatenate([ft[20:25], ft[15:20]], 0)  # Right then left
-            elif "dd_" in k:
-                ft = self.fts[k].get(study, np.zeros(30))
-            else:
-                sub_folder = "preds_aux/" if "aux" in k else "preds/"
-                ft_ = []
-                for sk in series_k:
-                    path = self.exp_folders[k] + f'{sub_folder}/{study}_{series[sk]}.npy'
-                    if os.path.exists(path):
-                        ft_.append(np.load(path))
 
-                    ft = np.mean(ft_, 0) if len(ft_) else self.dummies[k]
+            elif "dh" in exp or "ch" in exp:
+                ft = self.fts[exp].get(study, self.dummies[exp][:2])
 
-            if k in self.sizes:
-                ft = self.resize_fts(ft, self.sizes[k])
-                ft = ft.reshape(self.sizes[k], -1)
-            else:
-                ft = ft.flatten()
-
-            fts[k] = torch.from_numpy(ft).float().contiguous()
+            fts[exp] = torch.from_numpy(ft).float().contiguous()
 
         y = torch.from_numpy(self.targets[idx])
 

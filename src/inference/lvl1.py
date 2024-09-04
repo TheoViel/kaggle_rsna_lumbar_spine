@@ -57,12 +57,14 @@ def predict(
                 y_pred, y_pred_aux = model(x)
 
             # Get probabilities
-            # if loss_config["activation"] == "sigmoid":
-            #     y_pred = y_pred.sigmoid()
+            if loss_config["activation"] == "sigmoid":
+                y_pred = y_pred.sigmoid()
+            elif loss_config["activation"] == "series":
+                y_pred = y_pred.view(y_pred.size(0), -1, 3)
+            elif loss_config["activation"] == "study":
+                y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
             # elif loss_config["activation"] == "softmax":
             #     y_pred = y_pred.softmax(-1)
-            if loss_config["activation"] in ["series", "study"]:
-                y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
             # else:
             #     pass
 

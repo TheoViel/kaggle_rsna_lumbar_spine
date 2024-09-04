@@ -156,8 +156,6 @@ class StudyLoss(nn.Module):
         bs = targets.size(0)
         w = torch.pow(2, targets) if self.weighted else torch.ones_like(targets)
 
-        # print(inputs.view(-1, 3))
-
         loss = self.ce(inputs.view(-1, 3), targets.view(-1)).view(bs, -1)
 
         loss_scs, w_scs = loss[:, :5].flatten(), w[:, :5].flatten()
@@ -182,6 +180,7 @@ class StudyLoss(nn.Module):
         any_loss = - any_target * torch.log(any_pred) - (1 - any_target) * torch.log(1 - any_pred)
         any_loss = (any_w * any_loss).sum() / any_w.sum()
 
+        # return loss_scs, loss_nfn, loss_ss, any_loss
         return (loss_scs + loss_nfn + loss_ss + any_loss) / 4
 
 

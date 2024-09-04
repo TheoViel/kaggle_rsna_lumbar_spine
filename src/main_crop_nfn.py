@@ -236,10 +236,10 @@ if __name__ == "__main__":
     df = prepare_data_nfn(DATA_PATH, crop_folder=config.crop_folder)
 
     from training.main import k_fold
-    # k_fold(config, df, log_folder=log_folder, run=run)
+    k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
-        log_folder = "../logs/2024-08-29/16/"
+        log_folder = "../logs/2024-08-29/18/"
         if config.local_rank == 0:
             print("\n -> Inference\n")
 

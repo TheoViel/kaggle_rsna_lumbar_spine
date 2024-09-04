@@ -109,8 +109,38 @@ def process_2(study, series, orient, data_path="", on_gpu=False):
     except Exception:
         shapes = Counter([img.shape for img in imgs])
         shape = shapes.most_common()[0][0]
-#         print("Different shapes:", shapes, f"resize to {shape} - {orient}")
+        #         print("Different shapes:", shapes, f"resize to {shape} - {orient}")
         imgs = np.array(
             [cv2.resize(img, shape) if img.shape != shape else img for img in imgs]
         )
     return imgs, df
+
+
+def process_and_save(
+    study,
+    series,
+    orient,
+    data_path,
+    save_folder="",
+    save_meta=False,
+    save_middle_frame=False,
+):
+    imgs, df_series = process_2(int(study), int(series), orient, data_path=data_path)
+    if save_folder:
+        np.save(save_folder + f"npy/{study}_{series}.npy", imgs)
+        if save_meta:
+            df_series.to_csv(save_folder + f"csv/{study}_{series}.csv", index=False)
+        if save_middle_frame:
+            img = imgs[len(imgs) // 2]
+            img = np.clip(
+                img, np.percentile(img.flatten(), 0), np.percentile(img.flatten(), 98)
+            )
+            img = (img - img.min()) / (img.max() - img.min())
+            img = (img * 255).astype(np.uint8)
+            cv2.imwrite(save_folder + f"mid/{study}_{series}.png", img)
+
+    return {
+        "study_id": study,
+        "series_id": series,
+        "frames": df_series.instance_number.values.tolist(),
+    }
