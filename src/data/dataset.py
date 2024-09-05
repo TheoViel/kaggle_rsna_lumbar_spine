@@ -272,8 +272,12 @@ class CropDataset(ImageDataset):
         except KeyError:
             try:
                 img = np.load(self.img_paths[idx]).astype(np.float32)
-                img = (img - img.min()) / (img.max() - img.min()) * 255
-            except FileNotFoundError:
+                max_, min_ = img.max(), img.min()
+                if max_ != min_:
+                    img = (img - min_) / (max_ - min_) * 255
+                else:
+                    img = img - min_
+            except Exception:
                 img = np.zeros((1, 64, 64))
             img = img.astype(np.uint8)
 
@@ -587,7 +591,7 @@ class Seg3dDataset(Dataset):
                 self.imgs[self.img_paths[idx]] = np.load(self.img_paths[idx]).astype(
                     np.float32
                 )
-                self.masks[self.masseries_kpaths[idx]] = np.load(self.masseries_kpaths[idx]).astype(
+                self.masks[self.mask_paths[idx]] = np.load(self.mask_paths[idx]).astype(
                     np.uint8
                 )
 
@@ -663,7 +667,7 @@ class Seg3dDataset(Dataset):
 
 class FeatureDataset(Dataset):
     """
-    Dataset for training RNN models.
+    Dataset for training level 2 models.
     """
     def __init__(
         self,
@@ -787,7 +791,7 @@ class FeatureDataset(Dataset):
                     ft[15:25] = np.concatenate([ft[20:25], ft[15:20]], 0)  # Right then left
 
             elif "dh" in exp or "ch" in exp:
-                ft = self.fts[exp].get(study, self.dummies[exp][:2])
+                ft = self.fts[exp].get(study, self.dummies[exp[:2]])
 
             fts[exp] = torch.from_numpy(ft).float().contiguous()
 

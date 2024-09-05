@@ -4,7 +4,6 @@ import glob
 import pydicom
 import numpy as np
 import pandas as pd
-from natsort import natsorted
 from collections import Counter
 
 
@@ -34,7 +33,7 @@ def read_series_metadata(
     dicom_dir = data_path + f"{study_id}/{series_id}"
 
     # read dicom file
-    dicom_file = natsorted(glob.glob(f"{dicom_dir}/*.dcm"))
+    dicom_file = sorted(glob.glob(f"{dicom_dir}/*.dcm"), key=lambda x: int(x.split('/')[-1][:-4]))
     instance_number = [int(f.split("/")[-1].split(".")[0]) for f in dicom_file]
     dicom = [pydicom.dcmread(f, stop_before_pixels=False) for f in dicom_file]
 
@@ -48,11 +47,11 @@ def read_series_metadata(
                 series_description=series_description,
                 instance_number=i,
                 ImagePositionPatient=[float(v) for v in d.ImagePositionPatient],
-                ImageOrientationPatient=[float(v) for v in d.ImageOrientationPatient],
-                PixelSpacing=[float(v) for v in d.PixelSpacing],
-                SpacingBetweenSlices=float(d.SpacingBetweenSlices),
-                SliceThickness=float(d.SliceThickness),
-                grouping=str([round(float(v), 3) for v in d.ImageOrientationPatient]),
+                # ImageOrientationPatient=[float(v) for v in d.ImageOrientationPatient],
+                # PixelSpacing=[float(v) for v in d.PixelSpacing],
+                # SpacingBetweenSlices=float(d.SpacingBetweenSlices),
+                # SliceThickness=float(d.SliceThickness),
+                # grouping=str([round(float(v), 3) for v in d.ImageOrientationPatient]),
             )
         )
     dicom_df = pd.DataFrame(dicom_df)
@@ -101,7 +100,7 @@ def read_series_metadata(
 
 def process_2(study, series, orient, data_path="", on_gpu=False):
     df, imgs = read_series_metadata(
-        study, series, orient, data_path=data_path, advanced_sorting=(orient == "axial")
+        study, series, orient, data_path=data_path, advanced_sorting=False  # (orient == "axial")
     )
 
     try:
@@ -135,7 +134,11 @@ def process_and_save(
             img = np.clip(
                 img, np.percentile(img.flatten(), 0), np.percentile(img.flatten(), 98)
             )
-            img = (img - img.min()) / (img.max() - img.min())
+            max_, min_ = img.max(), img.min()
+            if max_ != min_:
+                img = (img - min_) / (max_ - min_)
+            else:
+                img = img - min_
             img = (img * 255).astype(np.uint8)
             cv2.imwrite(save_folder + f"mid/{study}_{series}.png", img)
 

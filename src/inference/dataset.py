@@ -114,3 +114,38 @@ class FeatureInfDataset(FeatureDataset):
         }
 
         self.fts = crop_fts
+
+
+class SafeDataset(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+        for idx in range(len(dataset)):
+            try:
+                ref_output = list(self.dataset[idx])
+                break
+            except Exception:
+                continue
+
+        if isinstance(ref_output[0], dict):
+            for k in ref_output[0]:
+                ref_output[0][k] *= 0
+        else:
+            ref_output[0] *= 0
+        self.ref_output = tuple(ref_output)
+
+    def __len__(self):
+        """
+        Get the length of the dataset.
+
+        Returns:
+            int: Length of the dataset.
+        """
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        try:
+            return self.dataset[idx]
+        except Exception:
+            print(f"Error at idx {idx}")
+            return self.ref_output
