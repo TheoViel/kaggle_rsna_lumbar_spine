@@ -27,7 +27,7 @@ def prepare_data(data_path="../input/"):
     df["weighting"] = df["series_description"].apply(lambda x: x.split()[1])
 
     df["img_path"] = df["study_id"].astype(str) + "_" + df["series_id"].astype(str)
-    df["img_path"] = data_path + "npy/" + df["img_path"] + ".npy"
+    df["img_path"] = data_path + "npy2/" + df["img_path"] + ".npy"
 
     labels = pd.read_csv(data_path + "train_label_coordinates.csv")
     labels = labels.groupby(["study_id", "series_id"]).agg(list).reset_index()
@@ -355,6 +355,7 @@ def prepare_data_crop(data_path, crop_folder=None, axial=False):
     df = prepare_data(data_path)
     df = df[df.columns[:8]]
     df['level'] = [["L1/L2", "L2/L3", "L3/L4", "L4/L5", "L5/S1"] for _ in range(len(df))]
+    df['side'] = "Center"
     df.drop("condition", axis=1, inplace=True)
 
     if axial:

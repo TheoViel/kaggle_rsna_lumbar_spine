@@ -4,7 +4,7 @@ import torch
 import warnings
 import argparse
 
-from data.preparation import prepare_data_scs
+from data.preparation import prepare_data_crop
 from util.torch import init_distributed
 from util.logger import (
     create_logger,
@@ -82,33 +82,34 @@ class Config:
     seed = 42
     verbose = 1
 
-    pipe = "crop_scs"
+    pipe = "crop_bi"
     targets = "target"
 
     # Data
     # crop_folder = "../input/crops_fix/"
-    # crop_folder = "../input/coords_crops_0.1_spinenet/"
-    crop_folder = "../input/coords_crops_0.1_2/"
+    crop_folder = "../input/coords_crops_0.15_2/"
+    crop_folder_ax = "../input/crops_ax_0.15/"
+    load_in_ram = False
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5
-    stride = 1
-    aug_strength = 3
+    n_frames = 3
+    stride = 3
+    aug_strength = 5
     crop = False
     use_coords_crop = False
-    remove_noisy = False
 
     # k-fold
     k = 4
-    folds_file = "../input/train_folded_v1.csv"  # f"../input/folds_{k}.csv"
-    selected_folds = [0, 1, 2, 3]
+    # folds_file = f"../input/folds_{k}.csv"
+    folds_file = "../input/train_folded_v1.csv"
+    selected_folds = [0]  # , 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
-    num_classes = 3
+    num_classes = 15
     num_classes_aux = 0
     drop_rate = 0.
     drop_path_rate = 0.
@@ -119,11 +120,11 @@ class Config:
 
     # Training
     loss_config = {
-        "name": "ce",
+        "name": "series",
         "weighted": False,
         "use_any": False,
         "smoothing": 0.0,
-        "activation": "softmax",
+        "activation": "series",
         "aux_loss_weight": 0.0,
         "name_aux": "patient",
         "smoothing_aux": 0.0,
@@ -134,11 +135,11 @@ class Config:
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,  # 1.0
+        "mix_proba": 1.0,  # 1.0
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
-        "num_classes": num_classes,
+        "num_classes": 3,
         "num_workers": 8,
     }
 
@@ -151,7 +152,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 5
+    epochs = 8
 
     use_fp16 = True
     verbose = 1
@@ -230,16 +231,17 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
-    df = prepare_data_scs(DATA_PATH, crop_folder=config.crop_folder)
+    df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder)
+    df["img_path_ax"] = df["img_path"].apply(lambda x: config.crop_folder_ax + x.split('/')[-1])
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
-        # log_folder = "../logs/2024-08-29/15/"
-
         if config.local_rank == 0:
             print("\n -> Inference\n")
+
+        log_folder = "../logs/2024-08-29/5/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

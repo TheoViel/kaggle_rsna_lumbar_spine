@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import proj3d
 from matplotlib.patches import Rectangle, FancyArrowPatch
 
-from params import CLASSES_SEG, LEVELS
+from params import CLASSES_SEG
 
 
 def get_injury_mask(img, coords, level, m=3):
@@ -66,21 +66,18 @@ class Arrow3D(FancyArrowPatch):
 def draw_slice(
     ax,
     df,
-    is_slice=True,
     scolor=[[1, 0, 0]],
     salpha=[0.1],
     is_border=True,
     bcolor=[[1, 0, 0]],
     balpha=[0.1],
-    is_origin=True,
     ocolor=[[1, 0, 0]],
     oalpha=[0.1],
-    is_arrow=True,
     h=640,
     w=640,
+    orient="sagittal",
 ):
-    df = df.copy()
-    df = df.reset_index(drop=True)
+    df = df.copy().reset_index(drop=True)
 
     D = len(df)
     if len(scolor) == 1:
@@ -104,48 +101,48 @@ def draw_slice(
         oy = np.array([o3, o4, o5])
         sx, sy, sz = d.ImagePositionPatient
         s = np.array([sx, sy, sz])
-        delx, dely = d.PixelSpacing
 
+        delx, dely = d.PixelSpacing
         p0 = s
         p1 = s + w * delx * ox
         p2 = s + h * dely * oy
         p3 = s + h * dely * oy + w * delx * ox
-
         grid = np.stack([p0, p1, p2, p3]).reshape(2, 2, 3)
-        gx = grid[:, :, 0]
-        gy = grid[:, :, 1]
-        gz = grid[:, :, 2]
 
-        # outline
-        if is_slice:
-            ax.plot_surface(gx, gy, gz, color=scolor[i], alpha=salpha[i])
+        if orient == "sagittal":
+            gx = grid[:, :, 0]
+            gy = grid[:, :, 1]
+            gz = grid[:, :, 2]
+        else:
+            gx = grid[:, :, 0]
+            gy = grid[:, :, 2]
+            gz = grid[:, :, 1]
+
+        # if i == 0:
+        #     print(gx)
+        #     print(gy)
+        #     print(gz)
+
+        ax.plot_surface(gx, gy, gz, color=scolor[i], alpha=salpha[i])
 
         if is_border:
             line = np.stack([p0, p1, p3, p2])
+            if orient == "sagittal":
+                x, y, z = line[:, 0], line[:, 1], line[:, 2]
+            else:
+                x, y, z = line[:, 0], line[:, 2], line[:, 1]
+                # x, y, z = line[:, 2], line[:, 0], line[:, 1]
             ax.plot(
-                line[:, 0],
-                line[:, 1],
-                zs=line[:, 2],
+                x,
+                y,
+                zs=z,
                 color=ocolor[i],
                 alpha=oalpha[i],
-                label=LEVELS[i] if not is_arrow else None,
+                # label=LEVELS[i] if orient == "sagittal" else None
             )
 
-        if is_origin:
-            ax.scatter([sx], [sy], [sz], color=ocolor[i], alpha=oalpha[i])
 
-    # check ordering of slice
-    if is_arrow:
-        sx0, sy0, sz0 = df.iloc[0].ImagePositionPatient
-        sx1, sy1, sz1 = df.iloc[-1].ImagePositionPatient
-        arrow_prop_dict = dict(
-            mutation_scale=20, arrowstyle="-|>", color="k", shrinkA=0, shrinkB=0
-        )
-        a = Arrow3D([sx0, sx1], [sy0, sy1], [sz0, sz1], **arrow_prop_dict)
-        ax.add_artist(a)
-
-
-def plot_coords(world_point, assigned_level, closest_z, h, w, df_axial, title=""):
+def plot_coords(world_point, assigned_level, closest_z, h, w, df, title="", orient="sagittal"):
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d")
     ax.scatter(world_point[:, 0], world_point[:, 1], world_point[:, 2])
@@ -164,47 +161,52 @@ def plot_coords(world_point, assigned_level, closest_z, h, w, df_axial, title=""
 
     draw_slice(
         ax,
-        df_axial,
-        is_slice=True,
+        df,
         scolor=coloring,
         salpha=[0.1],
         is_border=True,
         bcolor=coloring,
         balpha=[0.2],
-        is_origin=False,
         ocolor=[[0, 0, 0]],
         oalpha=[0.0],
-        is_arrow=True,
         h=h,
         w=w,
+        orient=orient,
     )
 
     coloring = level_ncolor[1:].tolist()
     draw_slice(
         ax,
-        df_axial.iloc[closest_z],
-        is_slice=True,
+        df.iloc[closest_z],
         scolor=coloring,
         salpha=[0.1],
         is_border=True,
         bcolor=coloring,
         balpha=[1],
-        is_origin=False,
         ocolor=[[1, 0, 0]],
         oalpha=[0],
-        is_arrow=False,
         h=h,
         w=w,
+        orient=orient,
     )
 
-    ax.set_aspect("equal")
-    # ax.set_title(f'axial slice assignment\n series_id:{sagittal_t2_id}')
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    ax.view_init(elev=0, azim=-10, roll=0)
+    if orient == "sagittal":
+        ax.set_aspect("equal")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
+        ax.view_init(elev=0, azim=-10, roll=0)
+    else:
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
+        ax.view_init(elev=10, azim=80, roll=0)
 
-    plt.legend()
+    # ax.set_xlim(-100, 100)
+    # ax.set_ylim(-100, 100)
+    # ax.set_zlim(-100, 100)
+
+    # plt.legend()
     if title:
         plt.title(title)
     plt.show()

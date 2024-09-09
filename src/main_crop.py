@@ -96,13 +96,13 @@ class Config:
     stride = 3
     aug_strength = 5
     crop = False
-    use_coords_crop = False
+    use_coords_crop = True
 
     # k-fold
     k = 4
     # folds_file = f"../input/folds_{k}.csv"
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [3]
+    selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"

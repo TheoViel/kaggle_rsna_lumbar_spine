@@ -291,8 +291,8 @@ class CropDataset(ImageDataset):
                 frame = self.coords_crop[idx][0]
 
         if self.train:
-            frame += np.random.choice([-1, 0, 0, 1])
-            # frame += np.random.choice([-2, -1, 0, 1, 2])
+            # frame += np.random.choice([-1, 0, 0, 1])
+            frame += np.random.choice([-2, -1, 0, 1, 2])
 
         frames = get_frames(
             frame,
@@ -504,8 +504,8 @@ class CoordsDataset(Dataset):
             transformed = self.transforms(image=image, keypoints=y[y.sum(-1) > 0].copy())
             image = transformed["image"]
 
-        y = torch.tensor(y)
-        y[y.sum(-1) > 0] = torch.tensor(transformed["keypoints"])
+        y = torch.tensor(y).float()
+        y[y.sum(-1) > 0] = torch.tensor(transformed["keypoints"]).float()
         y[:, 0] /= image.size(2)
         y[:, 1] /= image.size(1)
         y = torch.where(y < 0, -1, y)

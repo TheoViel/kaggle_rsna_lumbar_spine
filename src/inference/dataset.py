@@ -96,6 +96,7 @@ class FeatureInfDataset(FeatureDataset):
         df,
         exp_folders,
         crop_fts,
+        csv_fts=None,
         save_folder="../output/tmp",
     ):
         self.df = df
@@ -114,6 +115,9 @@ class FeatureInfDataset(FeatureDataset):
         }
 
         self.fts = crop_fts
+
+        if csv_fts is not None:
+            self.fts.update(csv_fts)
 
 
 class SafeDataset(Dataset):

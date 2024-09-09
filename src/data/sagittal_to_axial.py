@@ -2,8 +2,8 @@ import numpy as np
 from data.processing import read_series_metadata
 
 
-def project_to_3d(x, y, z, df):
-    d = df.iloc[z]
+def project_to_3d(x, y, z, df, orient="sagittal"):
+    d = df.iloc[z] if orient == "sagittal" else df.iloc[y]
     # h, w = d.h, d.w
     sx, sy, sz = [float(v) for v in d.ImagePositionPatient]
     (
@@ -14,37 +14,55 @@ def project_to_3d(x, y, z, df):
         o4,
         o5,
     ) = [float(v) for v in d.ImageOrientationPatient]
-    delx, dely = d.PixelSpacing
 
-    xx = o0 * delx * x + o3 * dely * y + sx
-    yy = o1 * delx * x + o4 * dely * y + sy
-    zz = o2 * delx * x + o5 * dely * y + sz
+    if orient == "sagittal":
+        delx, dely = d.PixelSpacing
+        xx = o0 * delx * x + o3 * dely * y + sx
+        yy = o1 * delx * x + o4 * dely * y + sy
+        zz = o2 * delx * x + o5 * dely * y + sz
+    else:
+        delx, delz = d.PixelSpacing
+        xx = o0 * delx * z + o3 * delz * x + sx
+        yy = o1 * delx * z + o4 * delz * x + sy
+        zz = o2 * delx * z + o5 * delz * x + sz
+
     return xx, yy, zz
 
 
-def view_to_world(sagittal_t2_point, z, sagittal_t2_df):
+def view_to_world(points, z, df, orient="sagittal"):
     xxyyzz = []
-    for i in range(1, 6):
-        x, y = sagittal_t2_point[i - 1]
-        xx, yy, zz = project_to_3d(x, y, z, sagittal_t2_df)
-        xxyyzz.append((xx, yy, zz))
+    if orient == "sagittal":
+        for (x, y) in points:
+            xx, yy, zz = project_to_3d(x, y, z, df, orient=orient)
+            xxyyzz.append((xx, yy, zz))
+    else:
+        for (x, y) in points:
+            xx, yy, zz = project_to_3d(y, z, x, df, orient=orient)
+            xxyyzz.append((xx, yy, zz))
 
     xxyyzz = np.array(xxyyzz)
     return xxyyzz
 
 
-def point_to_level(world_point, axial_df, return_closest_frame=False):
+def point_to_level(world_point, axial_df, return_closest_frame=False, orient="sagittal"):
     """
     Get closest axial slices (z) to the CSC world points
     """
     xxyyzz = world_point
     orientation = np.array(axial_df.ImageOrientationPatient.values.tolist())
     position = np.array(axial_df.ImagePositionPatient.values.tolist())
+
     ox = orientation[:, :3]
     oy = orientation[:, 3:]
     oz = np.cross(ox, oy)
-    t = xxyyzz.reshape(-1, 1, 3) - position.reshape(1, -1, 3)
-    dis = (oz.reshape(1, -1, 3) * t).sum(-1)  # np.dot(point-s,oz)
+
+    if orient == "sagittal":
+        t = xxyyzz.reshape(-1, 1, 3) - position.reshape(1, -1, 3)
+        dis = (oz.reshape(1, -1, 3) * t).sum(-1)  # np.dot(point-s,oz)
+    else:
+        t = xxyyzz.reshape(-1, 1, 3) - position.reshape(1, -1, 3)
+        dis = (oz.reshape(1, -1, 3) * t).sum(-1)  # np.dot(point-s,oz)
+
     fdis = np.fabs(dis)
     closest_z = fdis.argmin(-1)
 
@@ -58,7 +76,7 @@ def point_to_level(world_point, axial_df, return_closest_frame=False):
     point_group = axial_df.group.values[fdis.argsort(-1)[:, :3]].tolist()
     point_group = [list(set(g)) for g in point_group]
     group_point = [[] for g in range(num_group)]
-    for i in range(5):
+    for i in range(len(point_group)):
         for k in point_group[i]:
             group_point[k].append(i)
     group_point = [sorted(list(set(g))) for g in group_point]
@@ -125,10 +143,10 @@ def backproject_to_2d(xx, yy, zz, df):
 def get_axial_coords(
     study,
     series,
+    series_ax,
     coords,
     h,
     w,
-    df,
     data_path="../input/train_images/",
     world_point=None,
 ):
@@ -141,20 +159,49 @@ def get_axial_coords(
         return_imgs=False,
     )
 
+    df_axial, _ = read_series_metadata(
+        study, series_ax, "axial", data_path=data_path, return_imgs=False,
+    )
+
     coords[:, 0] *= w
     coords[:, 1] *= h
-
-    df_s = df[df["study_id"] == study]
-
-    df_axial, _ = read_series_metadata(
-        study,
-        df_s[df_s["orient"] == "Axial"].series_id.values[0],
-        "axial",
-        data_path=data_path,
-    )
 
     if world_point is None:
         world_point = view_to_world(coords, len(df_sagittal) // 2, df_sagittal)
     assigned_level, closest_z, dis = point_to_level(world_point, df_axial)
 
     return world_point, assigned_level, closest_z, df_axial
+
+
+def get_sagittal_coords(
+    study,
+    series,
+    series_ax,
+    coords,
+    frame,
+    h,
+    w,
+    data_path="../input/train_images/",
+    world_point=None,
+):
+    df_sagittal, _ = read_series_metadata(
+        study,
+        series,
+        "sagittal",
+        data_path=data_path,
+        advanced_sorting=False,
+        return_imgs=False,
+    )
+
+    df_axial, _ = read_series_metadata(
+        study, series_ax, "axial", data_path=data_path, return_imgs=False,
+    )
+
+    coords[:, 0] *= w
+    coords[:, 1] *= h
+
+    if world_point is None:
+        world_point = view_to_world(coords, frame, df_axial, orient="axial")
+    assigned_level, closest_z, dis = point_to_level(world_point, df_sagittal, orient="axial")
+
+    return world_point, assigned_level, closest_z, df_sagittal

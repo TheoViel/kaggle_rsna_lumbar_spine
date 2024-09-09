@@ -12,7 +12,7 @@ cd src
 
 # torchrun --nproc_per_node=4 main_crop_scs.py
 # echo
-torchrun --nproc_per_node=4 main_crop_nfn.py
+# torchrun --nproc_per_node=4 main_crop_nfn.py
 # torchrun --nproc_per_node=4 main_crop_ss.py
 
 # echo
@@ -21,4 +21,4 @@ torchrun --nproc_per_node=4 main_crop_nfn.py
 # torchrun --nproc_per_node=4 main_coords_ax.py
 
 
-# torchrun --nproc_per_node=4 main_crop_nfn_bi.py
+torchrun --nproc_per_node=4 main_crop_bi.py

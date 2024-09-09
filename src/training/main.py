@@ -196,6 +196,14 @@ def k_fold(config, df, log_folder=None, run=None):
             # if len(df) <= 1000:
             #     df_train, df_val = df, df
 
+            # if config.pipe in ["crop_nfn", "crop_scs", ]:
+            df_preds_coords = pd.read_csv('../output/seg_sag_coords.csv')
+            df_val = df_val.merge(df_preds_coords, how="left")
+            df_val['coords'] = df_val.apply(
+                lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]],
+                axis=1
+            )
+
             preds, metrics = train(
                 config,
                 df_train,

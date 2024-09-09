@@ -3,6 +3,7 @@ import time
 import torch
 import warnings
 import argparse
+# import pandas as pd
 
 from data.preparation import prepare_data_nfn
 from util.torch import init_distributed
@@ -86,10 +87,10 @@ class Config:
     targets = "target"
 
     # Data
-    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/crops_fix/"
     # crop_folder = "../input/coords_crops_0.1_f/"
     # crop_folder = "../input/coords_crops_0.1_2/"
-    # crop_folder = "../input/coords_crops_0.15_2/"
+    crop_folder = "../input/coords_crops_0.15_2/"
     resize = (224, 224)
 
     frames_chanel = 1
@@ -98,9 +99,9 @@ class Config:
     aug_strength = 3
 
     crop = False
-    load_in_ram = False  # True
-    use_coords_crop = False  # True
-    remove_noisy = False  # True
+    load_in_ram = False
+    use_coords_crop = True
+    remove_noisy = False
 
     # k-fold
     k = 4
@@ -160,7 +161,7 @@ class Config:
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = False
+    fullfit = True
     n_fullfit = 1
 
 
@@ -235,11 +236,15 @@ if __name__ == "__main__":
 
     df = prepare_data_nfn(DATA_PATH, crop_folder=config.crop_folder)
 
+    # df_preds_coords = pd.read_csv('../output/seg_sag_coords.csv')
+    # df = df.merge(df_preds_coords, how="left")
+    # df['coords'] = df.apply(lambda x: [x.left if x.side == "Left" else x.right], axis=1)
+
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
-        log_folder = "../logs/2024-08-29/18/"
+        # log_folder = "../logs/2024-08-29/18/"
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
