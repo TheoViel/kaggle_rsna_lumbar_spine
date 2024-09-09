@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from torch.utils.data import Dataset
 
@@ -126,9 +127,10 @@ class SafeDataset(Dataset):
 
         for idx in range(len(dataset)):
             try:
-                ref_output = list(self.dataset[idx])
+                ref_output = copy.deepcopy(list(self.dataset[idx]))
                 break
             except Exception:
+                print('??')
                 continue
 
         if isinstance(ref_output[0], dict):
