@@ -135,7 +135,7 @@ class Config:
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 1.0,  # 1.0
+        "mix_proba": 0.,  # 1.0
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
@@ -145,7 +145,7 @@ class Config:
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4,
+        "lr": 6e-4,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
