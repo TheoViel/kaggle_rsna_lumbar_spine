@@ -86,14 +86,14 @@ class Config:
     targets = "target"
 
     # Data
-    crop_folder = "../input/crops_fix/"
-    # crop_folder = "../input/coords_crops_0.1_2/"
+    # crop_folder = "../input/crops_fix/"
+    crop_folder = "../input/coords_crops_0.1_2/"
     load_in_ram = False
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5
-    stride = 3
+    n_frames = 13
+    stride = 1
     aug_strength = 5
     crop = False
     use_coords_crop = False
@@ -102,7 +102,7 @@ class Config:
     k = 4
     # folds_file = f"../input/folds_{k}.csv"
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [0]  # , 1, 2, 3]
+    selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"
@@ -144,7 +144,7 @@ class Config:
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4,
+        "lr": 1e-3,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
@@ -157,7 +157,7 @@ class Config:
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = False
+    fullfit = True
     n_fullfit = 1
 
 
@@ -240,7 +240,7 @@ if __name__ == "__main__":
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
-        # log_folder = "../logs/2024-08-29/5/"
+        # log_folder = "../logs/2024-09-11/20/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(
