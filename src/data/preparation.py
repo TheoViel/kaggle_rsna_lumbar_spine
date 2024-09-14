@@ -1,6 +1,7 @@
 import re
 import numpy as np
 import pandas as pd
+from collections import defaultdict
 
 from params import (
     CLASSES_SCS,
@@ -209,13 +210,13 @@ def prepare_data_nfn(data_path="../input/", crop_folder=None, explode=True, left
 
 
 def get_target_ss(row):
+    # print(row)
     la, lb = row.level.lower().split("/")
 
     try:
         labels = []
-        for i, condition in enumerate(row.condition):
-            c = re.sub(' ', '_', condition.lower())
-            labels.append(row[f"{c}_{la}_{lb}"][i])
+        for s in ["left", "right"]:
+            labels.append(row[f"{s}_subarticular_stenosis_{la}_{lb}"])
         return labels
     except KeyError:
         return np.nan
@@ -223,8 +224,8 @@ def get_target_ss(row):
 
 def prepare_data_ss_crop(data_path="../input/", crop_folder=None, explode=True, left_right=False):
     df = prepare_data(data_path)
-    df = df[df["weighting"] == "T1"].reset_index(drop=True)
-    # df = df[df["orient"] == "Sagittal"].reset_index(drop=True)
+    # df = df[df["weighting"] == "T1"].reset_index(drop=True)
+    df = df[df["orient"] == "Axial"].reset_index(drop=True)
 
     # df = df.head()
 
@@ -236,18 +237,16 @@ def prepare_data_ss_crop(data_path="../input/", crop_folder=None, explode=True, 
         df_train[c] = df_train[c].map(dict(zip(SEVERITIES, [0, 1, 2]))).fillna(-1)
     df_train = df_train.astype(int)
     df = df.merge(df_train, on="study_id", how="left")
+    df['side'] = "Center"
 
     # To disk level
     if explode:
-        df = df.explode(["condition", "level", "coords"]).dropna().reset_index(drop=True)
-        df["condition"] = df["condition"].apply(
-            lambda x: re.sub("Neural Foraminal Narrowing", "Subarticular Stenosis", x)
-        )
-        # df["condition"] = df["condition"].apply(
-        #     lambda x: re.sub("Spinal Canal Stenosis", "Subarticular Stenosis", x)
-        # )
-        df["side"] = df["condition"].apply(lambda x: x.split()[0])
-        df["target"] = df.apply(get_target, axis=1)
+        df = df.explode(["level", "condition", "coords"]).dropna().reset_index(drop=True)
+        df = df.sort_values(['study_id', 'series_id', 'level', 'condition'], ignore_index=True)
+        df = df.groupby(
+            [c for c in df.columns if c not in ['condition', 'coords']]
+        ).agg(list).reset_index()
+        df["target"] = df.apply(get_target_ss, axis=1)
         df.drop(CLASSES_SS, axis=1, inplace=True)
 
         if crop_folder is not None:
@@ -255,21 +254,7 @@ def prepare_data_ss_crop(data_path="../input/", crop_folder=None, explode=True, 
             lvl = df["level"].apply(lambda x: re.sub('/', '_', x.lower()))
             df["img_path"] = crop_folder + df["img_path"] + "_" + lvl + ".npy"
 
-        df = df[df["target"] >= 0]  # Remove not visible
-        df["target"] = df["target"].astype(int)
-
-        try:
-            df_coords_crops = pd.read_csv(crop_folder + "df_injury_coords.csv")
-            df = df.merge(
-                df_coords_crops,
-                on=["study_id", "series_id", "side", "level"],
-                how="left",
-            )
-            df = df.dropna().reset_index(drop=True)  # Removes some SCS
-            df["coords_crop"] = df["coords_crop"].apply(lambda x: eval(x)[0])
-
-        except FileNotFoundError:
-            pass
+        df = df[df["target"].apply(lambda x: np.sum(x) >= 0)]
 
     elif left_right:  # No side
         df = df.dropna()
@@ -351,17 +336,40 @@ def get_target_crop(row):
         return np.nan
 
 
+def simplify_coords(x):
+    coords = -1 * np.ones(3)
+    d = defaultdict(list)
+
+    if isinstance(x.condition, float):
+        return coords
+
+    for i, c in enumerate(x.condition):
+        side = c.split(' ')[0]
+        side = "Center" if side == "Spinal" else side
+        d[side].append(x.coords[i][0])
+
+    for k in d:
+        d[k] = int(np.median(d[k]))
+
+    coords[0] = d.get("Right", -1)
+    coords[1] = d.get("Center", -1)
+    coords[2] = d.get("Left", -1)
+    return coords
+
+
 def prepare_data_crop(data_path, crop_folder=None, axial=False):
     df = prepare_data(data_path)
-    df = df[df.columns[:8]]
     df['level'] = [["L1/L2", "L2/L3", "L3/L4", "L4/L5", "L5/S1"] for _ in range(len(df))]
     df['side'] = "Center"
-    df.drop("condition", axis=1, inplace=True)
 
     if axial:
         df = df[df['orient'] == "Axial"].reset_index(drop=True)
     else:
         df = df[df['orient'] == "Sagittal"].reset_index(drop=True)
+
+    df["coords"] = df.apply(simplify_coords, axis=1)
+    df["coords"] = df["coords"].apply(lambda x: int(np.mean(x[x > -1])) if x.max() > -1 else -1)
+    df.drop("condition", axis=1, inplace=True)
 
     # Add train data
     df_train = pd.read_csv(data_path + "train.csv")

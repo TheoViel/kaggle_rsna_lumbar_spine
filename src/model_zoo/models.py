@@ -62,6 +62,12 @@ def define_model(
             num_classes=0,
         )
         encoder.num_features = encoder.head.classifier[0].out_features
+    elif "eva" in name:
+        encoder = timm.create_model(
+            name,
+            pretrained=pretrained,
+            num_classes=0,
+        )
     elif "coat_" in name:
         encoder = timm.create_model(
             name,
@@ -91,6 +97,7 @@ def define_model(
         head_3d=head_3d,
         n_frames=n_frames,
     )
+    model.name = name
 
     if pretrained_weights:
         model = load_model_weights(
@@ -143,13 +150,18 @@ class ClsModel(nn.Module):
         self.pooling = pooling
         self.head_3d = head_3d
 
+        self.dense = nn.Identity()
         if pooling == "gem":
             self.global_pool = GeM(p_trainable=False)
         elif pooling in ["avg_h", "avg_w"]:
             if "224" in encoder.name or encoder.name == "coat_lite_medium":
-                self.nb_ft *= 7
+                self.dense = nn.Sequential(
+                    nn.Linear(self.nb_ft * 7, self.nb_ft)
+                )
             elif "384" in encoder.name:
-                self.nb_ft *= 12
+                self.dense = nn.Sequential(
+                    nn.Linear(self.nb_ft * 12, self.nb_ft)
+                )
             else:
                 raise NotImplementedError
         elif pooling == "flatten":
@@ -162,8 +174,19 @@ class ClsModel(nn.Module):
 
         self.dropout = nn.Dropout(drop_rate) if drop_rate else nn.Identity()
 
+        # 3D Head
         if head_3d == "lstm":
             self.lstm = nn.LSTM(
+                self.nb_ft, self.nb_ft // 4, batch_first=True, bidirectional=True
+            )
+        elif head_3d == "lstm_side":
+            self.lstm_center = nn.LSTM(
+                self.nb_ft, self.nb_ft // 4, batch_first=True, bidirectional=True
+            )
+            self.lstm_left = nn.LSTM(
+                self.nb_ft, self.nb_ft // 4, batch_first=True, bidirectional=True
+            )
+            self.lstm_right = nn.LSTM(
                 self.nb_ft, self.nb_ft // 4, batch_first=True, bidirectional=True
             )
         elif head_3d == "lstm_att":
@@ -181,7 +204,13 @@ class ClsModel(nn.Module):
                 batch_first=True,
             )
 
-        self.logits = nn.Linear(self.nb_ft, num_classes)
+        # Logits
+        if head_3d == "lstm_side":
+            self.logits_center = nn.Linear(self.nb_ft, 3)
+            self.logits_left = nn.Linear(self.nb_ft, 6)
+            self.logits_right = nn.Linear(self.nb_ft, 6)
+        else:
+            self.logits = nn.Linear(self.nb_ft, num_classes)
         if self.num_classes_aux:
             self.logits_aux = nn.Linear(self.nb_ft, num_classes_aux)
 
@@ -255,9 +284,15 @@ class ClsModel(nn.Module):
             torch.Tensor: Extracted features of shape [batch_size x num_features].
         """
         fts = self.encoder(x)
-
         # print(fts.size())
 
+        # Reorder features for transformers
+        if "vit" in self.name:
+            fts = fts.transpose(-1, -2)
+        elif "swin" in self.name:
+            fts = fts.transpose(-1, -2).transpose(-2, -3)
+
+        # Pool
         if self.pooling == "gem":
             assert len(fts.size()) == 4
             fts = self.global_pool(fts)[:, :, 0, 0]
@@ -276,6 +311,8 @@ class ClsModel(nn.Module):
             while len(fts.size()) > 2:
                 fts = fts.flatten(-2, -1)
 
+        # print(fts.size())
+        fts = self.dense(fts)
         # print(fts.size())
 
         fts = self.dropout(fts)
@@ -301,6 +338,31 @@ class ClsModel(nn.Module):
             logits_aux = torch.zeros((fts.size(0)))
 
         return logits, logits_aux
+
+    def forward_side(self, x):
+        mid = x.size(1) // 2
+        x_center, _ = self.lstm_center(x)  # [:, mid - 1: mid + 2])
+        x_center = torch.cat([x_center.mean(1), x_center.amax(1)], -1)
+
+        x_left, _ = self.lstm_left(x[:, mid:])
+        x_left = torch.cat([x_left.mean(1), x_left.amax(1)], -1)
+
+        x_right, _ = self.lstm_right(x[:, :mid + 1])
+        x_right = torch.cat([x_right.mean(1), x_right.amax(1)], -1)
+
+        logits_center = self.logits_center(x_center)
+        logits_left = self.logits_left(x_left)
+        logits_right = self.logits_right(x_right)
+
+        logits = torch.zeros(x.size(0), self.num_classes).to(x.device)
+
+        logits[:, :3] = logits_center  # scs
+        logits[:, 3:6] = logits_left[:, :3]  # nfn
+        logits[:, 6:9] = logits_right[:, :3]  # nfn
+        logits[:, 9:12] = logits_left[:, 3:]  # ss
+        logits[:, 12:] = logits_right[:, 3:]  # ss
+
+        return logits, torch.zeros((x.size(0)))
 
     def forward_head_3d(self, x):
         """
@@ -351,8 +413,12 @@ class ClsModel(nn.Module):
 
         fts = self.extract_features(x)
 
+        if self.head_3d == "lstm_side":
+            fts = fts.contiguous().view(bs, n_frames, -1)
+            return self.forward_side(fts)
+
         if self.head_3d:
-            fts = fts.view(bs, n_frames, -1)
+            fts = fts.contiguous().view(bs, n_frames, -1)
             fts = self.forward_head_3d(fts)
 
         logits, logits_aux = self.get_logits(fts)

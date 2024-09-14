@@ -216,6 +216,7 @@ class CropDataset(ImageDataset):
         use_coords_crop=False,
         load_in_ram=True,
         train=False,
+        flip=False,
     ):
         """
         Constructor for the CropDataset class.
@@ -254,6 +255,8 @@ class CropDataset(ImageDataset):
             col = "coords_crop" if "coords_crop" in df.columns else "coords"
             self.coords_crop = np.array(df[col].values.tolist()).astype(int)
 
+        self.flip = flip
+
     def __getitem__(self, idx):
         """
         Item accessor. Samples a random frame inside the organ.
@@ -287,8 +290,11 @@ class CropDataset(ImageDataset):
         # print(frame, "naive")
 
         if self.use_coords_crop:
-            if self.coords_crop[idx].max() > 0:
-                frame = self.coords_crop[idx][0]
+            if isinstance(self.coords_crop[idx], (np.int64, int, np.int32)):
+                frame = self.coords_crop[idx] if self.coords_crop[idx] > 0 else frame
+            else:
+                if self.coords_crop[idx].max() > 0:
+                    frame = self.coords_crop[idx][0]
 
         if self.train:
             # frame += np.random.choice([-1, 0, 0, 1])
@@ -333,6 +339,11 @@ class CropDataset(ImageDataset):
             image = image[0]
 
         # print(frames, len(img))
+
+        if np.random.random() < 0.5 and self.flip:
+            # print('flip')
+            y = torch.flip(y, [0])
+            image = torch.flip(image, [1])
 
         return image, y, 0
 
@@ -687,7 +698,10 @@ class FeatureDataset(Dataset):
         self.dummies = {
             "scs_crop": np.zeros(3),
             "nfn_crop": np.zeros(3),
+            "ss_crop_": np.zeros((2, 3)),
             "crop": np.zeros((5, 3)),
+            "crop_bi": np.zeros((5, 3)),
+            "crop_2": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),
         }
@@ -761,7 +775,7 @@ class FeatureDataset(Dataset):
             series_k = [series_k] if series_k in ["ss", "nfn", "scs"] else ["nfn", "scs"]  # "ss"
 
             if "crop" in exp:
-                sides = ["Left", "Right"] if "nfn" in exp or "ss" in exp else ['Center']
+                sides = ["Left", "Right"] if "nfn" in exp else ['Center']
                 ft = defaultdict(list)
                 for lvl in LEVELS:
                     for side in sides:
@@ -778,17 +792,22 @@ class FeatureDataset(Dataset):
                             ft[f"{lvl}_{side}"].append(ft_)
                 ft_ = []
                 for k in ft.keys():
+                    # print(exp, k)
                     try:
                         ft_.append(np.concatenate(ft[k], -1))
                     except ValueError:
                         print([x.shape for x in ft[k]])
+
                 ft = np.vstack(ft_)
+                # print(ft.shape)
 
                 # Put in the right order
                 ft = ft.reshape(5, -1, ft.shape[-1]).transpose(1, 0, 2).reshape(-1, ft.shape[-1])
                 if not ("scs" in k or "nfn" in k or "ss" in k):
                     ft[5:15] = np.concatenate([ft[10:15], ft[5:10]], 0)  # Right then left
                     ft[15:25] = np.concatenate([ft[20:25], ft[15:20]], 0)  # Right then left
+                # elif "ss" in k:
+                #     ft = np.concatenate([ft[5:], ft[:5]], 0)
 
             elif "dh" in exp or "ch" in exp:
                 ft = self.fts[exp].get(study, self.dummies[exp[:2]])

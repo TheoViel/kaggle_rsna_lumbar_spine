@@ -86,9 +86,9 @@ class Config:
     targets = "target"
 
     # Data
-    # crop_folder = "../input/crops_fix/"
+    crop_folder = "../input/crops_fix/"
     # crop_folder = "../input/coords_crops_0.1_spinenet/"
-    crop_folder = "../input/coords_crops_0.1_2/"
+    # crop_folder = "../input/coords_crops_0.1_2/"
 
     resize = (224, 224)
     frames_chanel = 1
@@ -134,8 +134,8 @@ class Config:
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,  # 1.0
-        "sched": False,
+        "mix_proba": 1.0,  # 1.0
+        "sched": True,
         "mix_alpha": 0.4,
         "additive_mix": False,
         "num_classes": num_classes,
@@ -151,7 +151,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 5
+    epochs = 10
 
     use_fp16 = True
     verbose = 1

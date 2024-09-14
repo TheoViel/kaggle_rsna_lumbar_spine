@@ -86,8 +86,10 @@ class Config:
     targets = "target"
 
     # Data
-    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/crops_fix/"
     # crop_folder = "../input/coords_crops_0.15/"
+    crop_folder = "../input/crops_ax_0.15/"
+
     resize = (224, 224)
     frames_chanel = 1
     n_frames = 5
@@ -103,10 +105,10 @@ class Config:
     selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
-    name = "coatnet_1_rw_224"
+    name = "coatnet_2_rw_224"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
-    num_classes = 3
+    num_classes = 6
     num_classes_aux = 0
     drop_rate = 0.  # WAS NOT USED, TWEAK ?
     drop_path_rate = 0.
@@ -117,11 +119,11 @@ class Config:
 
     # Training
     loss_config = {
-        "name": "ce",
+        "name": "series",
         "weighted": False,
         "use_any": False,
         "smoothing": 0.0,
-        "activation": "softmax",
+        "activation": "series",
         "aux_loss_weight": 0.0,
         "name_aux": "patient",
         "smoothing_aux": 0.0,
@@ -132,11 +134,11 @@ class Config:
         "batch_size": 16,
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,
+        "mix_proba": 0.,
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
-        "num_classes": num_classes,
+        "num_classes": 3,
         "num_workers": 8,
     }
 
@@ -149,7 +151,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 4
+    epochs = 5
 
     use_fp16 = True
     verbose = 1

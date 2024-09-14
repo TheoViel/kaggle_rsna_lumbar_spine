@@ -267,7 +267,8 @@ def kfold_inference_crop(
         if config.local_rank == 0 and not distributed:
             print(f"\n- Fold {fold + 1}")
 
-        model = define_model(
+        model_fct = define_model_bi if "bi" in config.pipe else define_model
+        model = model_fct(
             config.name,
             drop_rate=config.drop_rate,
             drop_path_rate=config.drop_path_rate,

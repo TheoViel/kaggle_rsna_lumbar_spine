@@ -86,8 +86,8 @@ class Config:
     targets = "target"
 
     # Data
-    # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/coords_crops_0.1_2/"
+    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/coords_crops_0.1_2/"
     load_in_ram = False
 
     resize = (224, 224)
@@ -96,13 +96,13 @@ class Config:
     stride = 3
     aug_strength = 5
     crop = False
-    use_coords_crop = True
+    use_coords_crop = False
 
     # k-fold
     k = 4
     # folds_file = f"../input/folds_{k}.csv"
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [0, 1, 2, 3]
+    selected_folds = [0]  # , 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"
@@ -115,7 +115,7 @@ class Config:
     n_channels = 3
     reduce_stride = False
     pooling = "avg"
-    head_3d = "lstm" if n_frames > 1 else ""
+    head_3d = "lstm_side" if n_frames > 1 else ""
 
     # Training
     loss_config = {
@@ -157,12 +157,13 @@ class Config:
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = True
+    fullfit = False
     n_fullfit = 1
 
 
 if __name__ == "__main__":
     warnings.simplefilter("ignore", UserWarning)
+    warnings.simplefilter("ignore", FutureWarning)
 
     config = Config
     init_distributed(config)
@@ -239,7 +240,7 @@ if __name__ == "__main__":
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
-        log_folder = "../logs/2024-08-29/5/"
+        # log_folder = "../logs/2024-08-29/5/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

@@ -48,7 +48,7 @@ def evaluate(
 
     with torch.no_grad():
         for x, y, y_aux in val_loader:
-            with torch.cuda.amp.autocast(enabled=use_fp16):
+            with torch.amp.autocast("cuda", enabled=use_fp16):
                 x = {k: x[k].cuda() for k in x} if isinstance(x, dict) else x.cuda()
 
                 y_pred, y_pred_aux = model(x)
@@ -132,7 +132,10 @@ def fit(
     Returns:
         dices (dict): Dice scores at different thresholds.
     """
-    scaler = torch.cuda.amp.GradScaler()
+    try:
+        scaler = torch.amp.GradScaler('cuda')
+    except AttributeError:
+        scaler = torch.cuda.amp.GradScaler()
 
     optimizer = define_optimizer(
         model,
@@ -196,7 +199,7 @@ def fit(
             if np.random.random() < mix_p and not skip_mix:
                 x, y, y_aux, _ = mix(x, y, y_aux)
 
-            with torch.cuda.amp.autocast(enabled=use_fp16):
+            with torch.amp.autocast("cuda", enabled=use_fp16):
                 y_pred, y_pred_aux = model(x)
                 loss = loss_fct(y_pred, y_pred_aux, y, y_aux)
 

@@ -111,7 +111,7 @@ def get_transfos(
     if augment:
         if strength == 0:
             augs = [
-                color_transforms(p=0.5),
+                color_transforms(p=0.25),
             ]
         elif strength == 1:
             augs = [

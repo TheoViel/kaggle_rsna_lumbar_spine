@@ -8,6 +8,7 @@ import neptune
 import datetime
 import subprocess
 import numpy as np
+from neptune.utils import stringify_unsupported
 
 from params import NEPTUNE_PROJECT
 
@@ -160,11 +161,7 @@ def init_neptune(config, log_folder):
 
     dic = config.__dict__.copy()
     del (dic["__doc__"], dic["__module__"], dic["__dict__"], dic["__weakref__"])
-    for k in dic.keys():
-        if not isinstance(dic[k], (dict, int, float, str)):
-            dic[k] = str(dic[k])
-
-    run["global/parameters/"] = dic
+    run["global/parameters/"] = stringify_unsupported(dic)
     print()
     return run
 
