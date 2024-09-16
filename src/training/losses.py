@@ -26,11 +26,12 @@ class SmoothCrossEntropyLoss(nn.Module):
         Returns:
             torch tensor [bs]: Loss values.
         """
-        mask = (targets == -1)
-        targets = torch.clamp(targets, min=0)
-
-        if len(targets.size()) == 1:  # to one hot
+        if len(targets.size()) == 1:  # to one hot, mask -1
+            mask = (targets == -1)
+            targets = torch.clamp(targets, min=0)
             targets = torch.zeros_like(inputs).scatter(1, targets.view(-1, 1).long(), 1)
+        else:
+            mask = (targets.sum(-1) == 0)
 
         if self.eps > 0:
             n_class = inputs.size(1)
@@ -40,21 +41,9 @@ class SmoothCrossEntropyLoss(nn.Module):
 
         loss = -targets * F.log_softmax(inputs, dim=1)
 
-        if len(loss.size()) == 2 and len(mask.size()) == 1:  # In case it was one-hot encoded
-            mask = mask.unsqueeze(-1).repeat(1, loss.size(1))
-        loss = loss.masked_fill(mask, 0)
-
-        if w is None:
-            loss = loss.sum(-1)
-        else:
-            if len(loss.size()) == 3:
-                w = w.unsqueeze(1)
-            elif len(loss.size()) == 4:
-                w = w.unsqueeze(1).unsqueeze(1)
-            elif len(loss.size()) == 5:
-                w = w.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            loss = (loss * w).sum(-1)
-
+        # if len(loss.size()) == 2 and len(mask.size()) == 1:  # In case it was one-hot encoded
+        #     mask = mask.unsqueeze(-1).repeat(1, loss.size(1))
+        loss = loss.sum(-1).masked_fill(mask, 0)
         return loss
 
 
@@ -89,16 +78,21 @@ class SeriesLoss(nn.Module):
         self.weighted = weighted
 
     def forward(self, inputs, targets):
-        if len(targets.size()) == 2:
-            targets = targets.view(-1)  # bs * n_classes
-        else:
-            targets = targets.view(-1, 3)  # bs * n_classes x 3
+        assert len(targets.size()) == 3
+
+        targets = targets.view(-1, 3)  # bs * n_classes x 3
+
+        mask = (targets.sum(-1) == 0)
+
         inputs = inputs.view(inputs.size(0), -1, 3).reshape(-1, 3)
         # bs x n_classes * 3 -> bs * n_classes x 3
 
-        w = torch.pow(2, targets) if self.weighted else 1  # 1, 2, 4
+        loss = self.ce(inputs, targets)
 
-        loss = self.ce(inputs, targets) * w
+        if self.weighted:
+            w = torch.pow(2, targets.argmax(1)).masked_fill(mask, 0)
+            loss = loss * w / w.float().mean()
+
         return loss
 
 

@@ -92,11 +92,11 @@ class Config:
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5
-    stride = 3
+    n_frames = 13
+    stride = 1
     aug_strength = 5
     crop = False
-    use_coords_crop = True
+    use_coords_crop = False
 
     # k-fold
     k = 4
@@ -115,7 +115,7 @@ class Config:
     n_channels = 3
     reduce_stride = False
     pooling = "avg"
-    head_3d = "lstm" if n_frames > 1 else ""
+    head_3d = "lstm_side" if n_frames > 1 else ""
 
     # Training
     loss_config = {
@@ -144,7 +144,7 @@ class Config:
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4,
+        "lr": 1e-3,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
@@ -163,6 +163,7 @@ class Config:
 
 if __name__ == "__main__":
     warnings.simplefilter("ignore", UserWarning)
+    warnings.simplefilter("ignore", FutureWarning)
 
     config = Config
     init_distributed(config)
@@ -239,7 +240,7 @@ if __name__ == "__main__":
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
-        log_folder = "../logs/2024-08-29/5/"
+        # log_folder = "../logs/2024-09-11/20/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

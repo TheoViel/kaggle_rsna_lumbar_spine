@@ -288,11 +288,15 @@ class CropDataset(ImageDataset):
 
         if self.use_coords_crop:
             if self.coords_crop[idx].max() > 0:
-                frame = self.coords_crop[idx][0]
+                gt_frame = self.coords_crop[idx][0]
+                if np.abs(frame - gt_frame) <= 3:  # Noisy
+                    frame = gt_frame
 
         if self.train:
-            # frame += np.random.choice([-1, 0, 0, 1])
-            frame += np.random.choice([-2, -1, 0, 1, 2])
+            if self.n_frames <= 3:
+                frame += np.random.choice([-1, 0, 1])
+            else:
+                frame += np.random.choice([-2, -1, 0, 1, 2])
 
         frames = get_frames(
             frame,
@@ -688,6 +692,7 @@ class FeatureDataset(Dataset):
             "scs_crop": np.zeros(3),
             "nfn_crop": np.zeros(3),
             "crop": np.zeros((5, 3)),
+            "crop_2": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),
         }
@@ -786,9 +791,9 @@ class FeatureDataset(Dataset):
 
                 # Put in the right order
                 ft = ft.reshape(5, -1, ft.shape[-1]).transpose(1, 0, 2).reshape(-1, ft.shape[-1])
-                if not ("scs" in k or "nfn" in k or "ss" in k):
-                    ft[5:15] = np.concatenate([ft[10:15], ft[5:10]], 0)  # Right then left
-                    ft[15:25] = np.concatenate([ft[20:25], ft[15:20]], 0)  # Right then left
+                # if not ("scs" in k or "nfn" in k or "ss" in k):
+                #     ft[5:15] = np.concatenate([ft[10:15], ft[5:10]], 0)  # Right then left
+                #     ft[15:25] = np.concatenate([ft[20:25], ft[15:20]], 0)  # Right then left
 
             elif "dh" in exp or "ch" in exp:
                 ft = self.fts[exp].get(study, self.dummies[exp[:2]])

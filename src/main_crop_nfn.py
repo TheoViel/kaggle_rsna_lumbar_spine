@@ -100,7 +100,7 @@ class Config:
 
     crop = False
     load_in_ram = False
-    use_coords_crop = True
+    use_coords_crop = False
     remove_noisy = False
 
     # k-fold
@@ -138,7 +138,7 @@ class Config:
         "batch_size": 16,
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,
+        "mix_proba": 1.,
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
@@ -148,14 +148,14 @@ class Config:
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4,
+        "lr": 1e-3,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
         "weight_decay": 0.0,
     }
 
-    epochs = 4
+    epochs = 10
 
     use_fp16 = True
     verbose = 1

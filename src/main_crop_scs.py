@@ -92,12 +92,13 @@ class Config:
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5
+    n_frames = 7
     stride = 1
     aug_strength = 3
     crop = False
     use_coords_crop = False
     remove_noisy = False
+    load_in_ram = False
 
     # k-fold
     k = 4
@@ -105,7 +106,7 @@ class Config:
     selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
-    name = "coatnet_1_rw_224"
+    name = "coatnet_2_rw_224"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
     num_classes = 3
@@ -134,7 +135,7 @@ class Config:
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.5,  # 1.0
+        "mix_proba": 0.,  # 1.0
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
@@ -157,7 +158,7 @@ class Config:
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = True
+    fullfit = False
     n_fullfit = 1
 
 

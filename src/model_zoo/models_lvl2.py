@@ -102,7 +102,15 @@ class SimpleModel(nn.Module):
         logits = torch.zeros(bs, 25, 3).to(x[ref_k].device)
 
         # fts = x["dd_v1"].view(bs, 25, 3)
-        # fts = x["crop"].view(bs, 25, 3)
+        if "crop_2" in x.keys():
+            x["crop"] = (x["crop"] + x["crop_2"]) / 2
+            del x["crop_2"]
+            
+        # x['dh'][:, -10:] = 0
+        if "dh_2" in x.keys():
+            x['dh'][:, -10:] = x['dh_2'][:, -10:]
+            del x['dh_2']
+
         fts = torch.cat(
             [
                 x[k].view(bs, 25, -1)
