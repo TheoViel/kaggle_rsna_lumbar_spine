@@ -698,7 +698,13 @@ class FeatureDataset(Dataset):
             "nfn_crop": np.zeros(3),
             "ss_crop_": np.zeros((2, 3)),
             "crop": np.zeros((5, 3)),
+<<<<<<< HEAD
+<<<<<<< HEAD
             "crop_bi": np.zeros((5, 3)),
+=======
+>>>>>>> 7c2b817 (a100)
+=======
+>>>>>>> 7c2b817be4291a757ac90fb3d10bb0387f572ecc
             "crop_2": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),

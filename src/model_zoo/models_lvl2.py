@@ -104,7 +104,6 @@ class SimpleModel(nn.Module):
         if "crop_2" in x.keys():
             x["crop"] = (x["crop"] + x["crop_2"]) / 2
             del x["crop_2"]
-
         # x['dh'][:, -10:] = 0
         if "dh_2" in x.keys():
             x['dh'][:, -10:] = x['dh_2'][:, -10:]
