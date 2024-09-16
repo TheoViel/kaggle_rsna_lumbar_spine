@@ -209,7 +209,7 @@ def k_fold(config, df, log_folder=None, run=None):
                     )
                     # df_train = df_train.merge(df_preds_coords, how="left")
                     # df_train['coords'] = df_train.apply(
-                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]]
+                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]],
                     #     axis=1
                     # )
 
