@@ -13,7 +13,7 @@ from data.dataset import CropDataset, ImageDataset, CoordsDataset, CropSagAxData
 from data.transforms import get_transfos
 
 from util.torch import seed_everything, count_parameters, save_model_weights
-from params import NOISY_SERIES
+from params import NOISY_STUDIES
 
 
 def train(config, df_train, df_val, fold, log_folder=None, run=None):
@@ -57,6 +57,7 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         use_coords_crop=config.use_coords_crop,
         train=True,
         load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
+        flip=config.flip if hasattr(config, "flip") else False,
     )
 
     transfos = get_transfos(
@@ -187,7 +188,7 @@ def k_fold(config, df, log_folder=None, run=None):
 
             if hasattr(config, "remove_noisy"):
                 if config.remove_noisy:
-                    df_train = df_train[~df_train['series_id'].isin(NOISY_SERIES)]
+                    df_train = df_train[~df_train['study_id'].isin(NOISY_STUDIES)]
                     df_train = df_train.reset_index(drop=True)
 
             # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
@@ -208,7 +209,7 @@ def k_fold(config, df, log_folder=None, run=None):
                     )
                     # df_train = df_train.merge(df_preds_coords, how="left")
                     # df_train['coords'] = df_train.apply(
-                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]],
+                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]]
                     #     axis=1
                     # )
 

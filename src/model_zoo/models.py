@@ -341,15 +341,7 @@ class ClsModel(nn.Module):
 
     def forward_side(self, x):
         mid = x.size(1) // 2
-<<<<<<< HEAD
-<<<<<<< HEAD
-        delta = 1  # mid // 2
-=======
         delta = 2  # mid // 2
->>>>>>> 7c2b817 (a100)
-=======
-        delta = 2  # mid // 2
->>>>>>> 7c2b817be4291a757ac90fb3d10bb0387f572ecc
         x_center, _ = self.lstm_center(x[:, mid - delta: mid + delta + 1])
         x_center = torch.cat([x_center.mean(1), x_center.amax(1)], -1)
 

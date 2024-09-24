@@ -89,6 +89,7 @@ class Config:
     # crop_folder = "../input/crops_fix/"
     crop_folder = "../input/coords_crops_0.1_2/"
     load_in_ram = False
+    remove_noisy = True
 
     resize = (224, 224)
     frames_chanel = 1
@@ -97,6 +98,7 @@ class Config:
     aug_strength = 5
     crop = False
     use_coords_crop = False
+    flip = False
 
     # k-fold
     k = 4
