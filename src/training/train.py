@@ -6,6 +6,8 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 from transformers import get_linear_schedule_with_warmup
 
+import model_zoo.dsnt as dsnt
+
 from data.loader import define_loaders
 from training.losses import SpineLoss
 from training.mix import Mixup, Cutmix
@@ -43,8 +45,7 @@ def evaluate(
         val_loss (float): Validation loss.
     """
     model.eval()
-    val_losses = []
-    preds, preds_aux = [], []
+    preds, val_losses = [], []
 
     with torch.no_grad():
         for x, y, y_aux in val_loader:
@@ -65,31 +66,28 @@ def evaluate(
                 y_pred = y_pred.softmax(-1)
             elif loss_config["activation"] in ["series", "study"]:
                 y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
+            elif loss_config["activation"] == "dsnt":
+                y_pred = dsnt.flat_softmax(y_pred)
+                y_pred = (dsnt.dsnt(y_pred) + 1) / 2  # coords in [0, 1]
             else:
                 pass
                 # raise NotImplementedError
-
             preds.append(y_pred.detach())
-            preds_aux.append(y_pred_aux.detach())
 
     val_losses = torch.stack(val_losses)
     preds = torch.cat(preds, 0)
-    preds_aux = torch.cat(preds_aux, 0)
 
     if distributed:
         val_losses = sync_across_gpus(val_losses, world_size)
         preds = sync_across_gpus(preds, world_size)
-        if model.module.num_classes_aux:
-            preds_aux = sync_across_gpus(preds_aux, world_size)
         torch.distributed.barrier()
 
     if local_rank == 0:
         preds = preds.cpu().numpy()
-        preds_aux = preds_aux.cpu().numpy()
         val_loss = val_losses.cpu().numpy().mean()
-        return preds, preds_aux, val_loss
+        return preds, val_loss
     else:
-        return 0, 0, 0
+        return 0, 0
 
 
 def fit(
@@ -235,7 +233,7 @@ def fit(
                     avg_losses = sync_across_gpus(avg_losses, world_size)
                 avg_loss = avg_losses.cpu().numpy().mean()
 
-                preds, preds_aux, avg_val_loss = evaluate(
+                preds, avg_val_loss = evaluate(
                     model,
                     val_loader,
                     loss_config,
@@ -253,7 +251,11 @@ def fit(
 
                     preds = preds[: len(val_dataset)]
 
-                    if preds.shape[1] == 25:
+                    if loss_config['name'] in ['sigmoid_mse', "dsnt"]:
+                        y = val_dataset.targets_rel.flatten()
+                        dist = np.abs(y - preds.flatten())
+                        dist = (dist[y > 0] * 100).mean()
+                    elif preds.shape[1] == 25:
                         rsna_metrics = rsna_loss(val_dataset.targets, preds)[1]
                     elif len(preds.shape) == 3:
                         auc = np.mean([
@@ -266,10 +268,6 @@ def fit(
                         auc = roc_auc_score(
                             val_dataset.targets.flatten(), preds.flatten()
                         )
-                    elif preds.shape[1] in [10, 4]:  # Coords
-                        y = val_dataset.targets_rel.flatten()
-                        dist = np.abs(y - preds.flatten())
-                        dist = (dist[y > 0] * 100).mean()
                     else:
                         raise NotImplementedError
 

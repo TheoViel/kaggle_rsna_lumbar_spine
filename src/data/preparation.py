@@ -216,7 +216,7 @@ def get_target_ss(row):
     try:
         labels = []
         for s in ["left", "right"]:
-            labels.append(row[f"{s}_subarticular_stenosis_{la}_{lb}"])
+            labels.append(row[f"{s}_subarticular_stenosis_{la}_{lb}"][0])
         return labels
     except KeyError:
         return np.nan
@@ -305,8 +305,8 @@ def prepare_data_ss(data_path="../input/", crop_folder=None, explode=True, left_
             lambda x: x.target[x.side.index("Right")] if "Right" in x.side else -1, axis=1
         )
 
-        df.drop("target", axis=1, inplace=True)
-        df['target_aux'] = df['level'].apply(lambda x: LEVELS.index(x))
+        # df.drop("target", axis=1, inplace=True)
+        # df['target_aux'] = df['level'].apply(lambda x: LEVELS.index(x))
 
     return df
 
@@ -415,7 +415,7 @@ def get_coords_target(row, axial=False, relative=False):
     return target
 
 
-def prepare_coords_data(data_path="../input/coords/", axial=False, use_ext=False):
+def prepare_coords_data(data_path="../input/coords/", axial=False, use_ext=True):
     if axial:
         df = pd.read_csv(data_path + 'coords_ax.csv')
         df = df.groupby(['study_id', 'series_id', "img_path"]).agg(list).reset_index()

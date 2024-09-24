@@ -113,21 +113,33 @@ class SimpleModel(nn.Module):
             [
                 x[k].view(bs, 25, -1)
                 for k in x.keys()
-                if not any([s in k for s in ["scs", "nfn", "ss"]])
+                if not any([s in k for s in ["scs", "nfn", "ss", "spinenet"]])
             ],
             -1,
         )
 
+        # print(fts.size())
+        # print(x['spinenet'].size())
+
         fts_scs = torch.cat(
-            [fts[:, :5]] + [x[k].view(bs, -1, 3) for k in x.keys() if "scs" in k], -1
+            [fts[:, :5]] +
+            [x[k].view(bs, -1, 3) for k in x.keys() if "scs" in k] +
+            ([x['spinenet']] if "spinenet" in x else []),
+            -1
         )
 
         fts_nfn = torch.cat(
-            [fts[:, 5:15]] + [x[k].view(bs, -1, 3) for k in x.keys() if "nfn" in k], -1
+            [fts[:, 5:15]] +
+            [x[k].view(bs, -1, 3) for k in x.keys() if "nfn" in k] +
+            ([x['spinenet'].repeat(1, 2, 1)] if "spinenet" in x else []),
+            -1
         )
 
         fts_ss = torch.cat(
-            [fts[:, 15:]] + [x[k].view(bs, -1, 3) for k in x.keys() if "ss" in k], -1
+            [fts[:, 15:]] +
+            [x[k].view(bs, -1, 3) for k in x.keys() if "ss" in k] +
+            ([x['spinenet'].repeat(1, 2, 1)] if "spinenet" in x else []),
+            -1
         )
 
         logits[:, :5] = self.logits_scs(fts_scs)

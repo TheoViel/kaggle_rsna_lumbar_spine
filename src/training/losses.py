@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import model_zoo.dsnt as dsnt
+
 
 class SmoothCrossEntropyLoss(nn.Module):
     """
@@ -58,6 +60,26 @@ class SigmoidMSELoss(nn.Module):
         # loss = torch.abs(inputs * 100 - targets * 100)
         loss = loss.masked_fill(mask, 0)
         return loss.mean(-1)
+
+
+class DSNTLoss(nn.Module):
+    """
+    Sigmoid on preds + MSE
+    """
+    def forward(self, inputs, targets):
+        mask = (targets == -1).amax(-1)
+        targets = targets * 2 - 1  # [0, 1] -> [-1, 1]
+
+        heatmaps = dsnt.flat_softmax(inputs)
+        coords = dsnt.dsnt(heatmaps)
+
+        euc_losses = dsnt.euclidean_losses(coords, targets)
+        reg_losses = dsnt.js_reg_losses(heatmaps, targets, sigma_t=1.0)
+
+        loss = euc_losses + reg_losses
+        loss = loss.masked_fill(mask, 0)
+
+        return loss.mean(-1).mean(-1)
 
 
 class SeriesLoss(nn.Module):
@@ -223,6 +245,8 @@ class SpineLoss(nn.Module):
             )
         elif config["name"] == "sigmoid_mse":
             self.loss = SigmoidMSELoss()
+        elif config["name"] == "dsnt":
+            self.loss = DSNTLoss()
         else:
             raise NotImplementedError
 
@@ -236,6 +260,8 @@ class SpineLoss(nn.Module):
                 weighted=config.get("weighted", False),
                 use_any=config.get("use_any", False),
             )
+        elif config["name_aux"] == "dsnt":
+            self.loss_aux = DSNTLoss()
         else:
             pass
 
@@ -288,6 +314,11 @@ class SpineLoss(nn.Module):
             torch.Tensor: Loss value.
         """
         pred, pred_aux, y, y_aux = self.prepare(pred, pred_aux, y, y_aux)
+
+        # print(pred.size())
+        # print(pred_aux.size())
+        # print(y.size())
+        # print(y_aux.size())
 
         loss = self.loss(pred, y)
 

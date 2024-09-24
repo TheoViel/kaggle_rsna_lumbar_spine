@@ -71,6 +71,7 @@ class ImageDataset(Dataset):
         stride=1,
         load_in_ram=True,
         train=False,
+        use_coords_target=False,
         **kwargs,
     ):
         """
@@ -99,7 +100,14 @@ class ImageDataset(Dataset):
         self.stride = stride
 
         self.train = train
-        self.coords = df["coords"].values if "coords" in df.columns else None
+        self.coords = None
+        self.use_coords_target = use_coords_target
+        if "coords" in df.columns:
+            try:
+                self.coords = df["coords"].apply(np.vstack).values
+            except TypeError:
+                self.coords = df["coords"].values
+            self.sides = df['side'].values
 
         self.load_in_ram = load_in_ram
         self.load_imgs_in_ram()
@@ -130,6 +138,17 @@ class ImageDataset(Dataset):
             int: Length of the dataset.
         """
         return len(self.df)
+
+    def get_coords_target(self, idx):
+        y = np.zeros((2, 2)) - 1
+        sides = self.sides[idx]
+
+        for i, s in enumerate(['Left', 'Right']):
+            if s not in sides:
+                continue
+            coords = self.coords[idx][sides.index(s)]
+            y[i] = coords[1:]
+        return y
 
     def __getitem__(self, idx):
         """
@@ -182,12 +201,38 @@ class ImageDataset(Dataset):
         image = (image - image.min()) / (image.max() - image.min())
 
         # Augment
-        if self.transforms:
-            transformed = self.transforms(image=image)
-            image = transformed["image"]
+        if self.use_coords_target:
+            # Augment
+            if self.transforms:
+                y = self.get_coords_target(idx)
+                transformed = self.transforms(image=image, keypoints=y[y.sum(-1) > 0].copy())
+                image = transformed["image"]
 
-        y = torch.from_numpy(self.targets[idx])
-        y_aux = torch.tensor([self.targets_aux[idx]])
+            y = torch.tensor(y).float()
+            y[y.sum(-1) > 0] = torch.tensor(transformed["keypoints"]).float()
+            y[:, 0] /= image.size(2)
+            y[:, 1] /= image.size(1)
+            y = torch.where(y < 0, -1, y)
+            y = torch.where(y > 1, -1, y)
+
+            y_aux = y.clone()
+
+        else:
+            if self.transforms:
+                transformed = self.transforms(image=image)
+                image = transformed["image"]
+            y_aux = torch.tensor([self.targets_aux[idx]])
+
+        tgt = self.targets[idx]
+        if isinstance(self.targets[idx], (int, float, np.int64, np.int32)):
+            y = torch.zeros(3, dtype=torch.float)
+            if tgt > -1:
+                y[tgt] = 1
+        else:
+            y = torch.zeros((len(tgt), 3), dtype=torch.float)
+            for i in range(len(tgt)):
+                if tgt[i] > -1:
+                    y[i, tgt[i]] = 1
 
         # Reshape
         if self.frames_chanel:
@@ -216,6 +261,7 @@ class CropDataset(ImageDataset):
         use_coords_crop=False,
         load_in_ram=True,
         train=False,
+        flip=False,
     ):
         """
         Constructor for the CropDataset class.
@@ -254,6 +300,8 @@ class CropDataset(ImageDataset):
             col = "coords_crop" if "coords_crop" in df.columns else "coords"
             self.coords_crop = np.array(df[col].values.tolist()).astype(int)
 
+        self.flip = flip
+
     def __getitem__(self, idx):
         """
         Item accessor. Samples a random frame inside the organ.
@@ -287,10 +335,16 @@ class CropDataset(ImageDataset):
         # print(frame, "naive")
 
         if self.use_coords_crop:
-            if self.coords_crop[idx].max() > 0:
-                gt_frame = self.coords_crop[idx][0]
-                if np.abs(frame - gt_frame) <= 3:  # Noisy
-                    frame = gt_frame
+            gt_frame = frame
+            if isinstance(self.coords_crop[idx], (int, np.int32, np.int64)):
+                if self.coords_crop[idx] > 0:
+                    gt_frame = self.coords_crop[idx]
+            else:
+                if self.coords_crop[idx].max() > 0:
+                    gt_frame = self.coords_crop[idx][0]
+
+            if np.abs(frame - gt_frame) <= 3:  # Noisy
+                frame = gt_frame
 
         if self.train:
             if self.n_frames <= 3:
@@ -340,7 +394,10 @@ class CropDataset(ImageDataset):
 
         if np.random.random() < 0.5 and self.flip:
             # print('flip')
-            y = torch.flip(y, [0])
+            if y.size(0) == 2:
+                y = torch.flip(y, [0])
+            else:
+                y = y[[0, 2, 1, 4, 3]].contiguous()
             image = torch.flip(image, [1])
 
         return image, y, 0
@@ -698,16 +755,11 @@ class FeatureDataset(Dataset):
             "nfn_crop": np.zeros(3),
             "ss_crop_": np.zeros((2, 3)),
             "crop": np.zeros((5, 3)),
-<<<<<<< HEAD
-<<<<<<< HEAD
             "crop_bi": np.zeros((5, 3)),
-=======
->>>>>>> 7c2b817 (a100)
-=======
->>>>>>> 7c2b817be4291a757ac90fb3d10bb0387f572ecc
             "crop_2": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),
+            "spinenet": np.zeros((12)),
         }
 
         self.fts = {}
@@ -720,6 +772,11 @@ class FeatureDataset(Dataset):
                     file["study_id"].tolist(),
                     file['logits'].float().cpu().numpy(),
                 ))
+            elif "spinenet" in k:
+                df = pd.read_csv(self.exp_folders[k]).set_index("series_id")
+                for level in LEVELS_:
+                    df[level] = df[level].fillna('()').apply(eval)
+                self.fts[k] = df
 
     @staticmethod
     def get_series_dict(df):
@@ -810,6 +867,33 @@ class FeatureDataset(Dataset):
 
             elif "dh" in exp or "ch" in exp:
                 ft = self.fts[exp].get(study, self.dummies[exp[:2]])
+
+            elif "spinenet" in exp:
+                ft = []
+                for sk in ["nfn", "scs"]:
+                    for s in series[sk]:
+                        ft_ = []
+                        for level in LEVELS_:
+                            fts_ = self.fts[exp].loc[s][level]
+                            if isinstance(fts_, dict):
+                                fts_ = np.concatenate([
+                                    fts_['CentralCanalStenosis'],
+                                    fts_['Narrowing'],
+                                    fts_['ForaminalStenosisLeft'],
+                                    fts_['ForaminalStenosisRight']]
+                                )
+                            else:
+                                fts_ = self.dummies[exp]
+
+                            ft_.append(fts_)
+                        ft.append(np.array(ft_))
+                ft = np.mean(ft, 0)
+
+            else:
+                raise NotImplementedError
+
+            # print(exp)
+            # print(type(ft))
 
             fts[exp] = torch.from_numpy(ft).float().contiguous()
 

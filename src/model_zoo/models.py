@@ -3,8 +3,9 @@ import torch
 import warnings
 import torch.nn as nn
 
+from model_zoo.spinenet import GradingModel
 from model_zoo.layers import GeM, Attention
-from util.torch import load_model_weights
+# from util.torch import load_model_weights
 
 warnings.simplefilter(action="ignore", category=UserWarning)
 
@@ -47,7 +48,13 @@ def define_model(
     Returns:
         ClsModel: The defined model.
     """
-    if drop_path_rate > 0 and "coat_" not in name:
+    if name == "spinenet":
+        encoder = GradingModel()
+        if pretrained:
+            encoder.load_weights("../output/grading", verbose=verbose)
+        head_3d = ""
+
+    elif drop_path_rate > 0 and "coat_" not in name:
         encoder = timm.create_model(
             name,
             pretrained=pretrained,
@@ -100,9 +107,18 @@ def define_model(
     model.name = name
 
     if pretrained_weights:
-        model = load_model_weights(
-            model, pretrained_weights, verbose=verbose, strict=False
-        )
+        import re
+        if verbose:
+            print(f'-> Loading encoder weights from {pretrained_weights}\n')
+        sd = torch.load(pretrained_weights)
+        d = {}
+        for k in sd:
+            if "model.encoder.model" in k:
+                k_ = re.sub("model.encoder.model.", "", k)
+                k_ = re.sub("stages_", "stages.", k_)
+            d[k_] = sd[k]
+        del d["stages.3.blocks.1.mlp.fc2.bias"]
+        model.encoder.load_state_dict(d, strict=False)
 
     if reduce_stride:
         model.reduce_stride()
@@ -220,6 +236,11 @@ class ClsModel(nn.Module):
         """
         Update the number of input channels for the encoder.
         """
+        if self.encoder.name == "spinenet":
+            if self.n_channels != 1:
+                self.encoder._update_num_channels(self.n_channels)
+            return
+
         if self.n_channels != 3:
             if "convnext" in self.encoder.name:
                 conv = self.encoder.stem[0]
@@ -341,15 +362,7 @@ class ClsModel(nn.Module):
 
     def forward_side(self, x):
         mid = x.size(1) // 2
-<<<<<<< HEAD
-<<<<<<< HEAD
-        delta = 1  # mid // 2
-=======
         delta = 2  # mid // 2
->>>>>>> 7c2b817 (a100)
-=======
-        delta = 2  # mid // 2
->>>>>>> 7c2b817be4291a757ac90fb3d10bb0387f572ecc
         x_center, _ = self.lstm_center(x[:, mid - delta: mid + delta + 1])
         x_center = torch.cat([x_center.mean(1), x_center.amax(1)], -1)
 

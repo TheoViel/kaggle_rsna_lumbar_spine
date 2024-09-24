@@ -9,7 +9,7 @@ from model_zoo.models_lvl2 import define_model
 from data.dataset import FeatureDataset
 from util.metrics import rsna_loss
 from util.torch import seed_everything, count_parameters, save_model_weights
-from params import NOISY_SERIES
+from params import NOISY_STUDIES
 
 
 def train(
@@ -124,7 +124,7 @@ def k_fold(config, df, log_folder=None, run=None):
 
             if hasattr(config, "remove_noisy"):
                 if config.remove_noisy:
-                    df_train = df_train[~df_train['series_id'].isin(NOISY_SERIES)]
+                    df_train = df_train[~df_train['study_id'].isin(NOISY_STUDIES)]
                     df_train = df_train.reset_index(drop=True)
 
             preds, metrics = train(

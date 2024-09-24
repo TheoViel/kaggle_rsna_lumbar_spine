@@ -94,13 +94,13 @@ class Config:
     aug_strength = 3
     crop = True
     use_coords_crop = False
-    load_in_ram = True
+    load_in_ram = False
     use_mask = False
 
     # k-fold
     k = 4
     folds_file = f"../input/folds_{k}.csv"
-    selected_folds = [0, 1, 2, 3]
+    selected_folds = [0]  # , 1, 2, 3]
 
     # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium
     name = "coat_lite_medium"

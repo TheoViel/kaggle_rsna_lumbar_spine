@@ -91,9 +91,9 @@ class Config:
     load_in_ram = False
     remove_noisy = False
 
-    resize = (224, 224)
-    frames_chanel = 1
-    n_frames = 13
+    resize = (112, 224)
+    frames_chanel = 0
+    n_frames = 9
     stride = 1
     aug_strength = 5
     crop = False
@@ -107,14 +107,14 @@ class Config:
     selected_folds = [0]  # , 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
-    name = "coatnet_1_rw_224"
-    pretrained_weights = "../logs/2024-09-19/17/"  # PRETRAINED_WEIGHTS[name]  # None
+    name = "spinenet"
+    pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
     num_classes = 15
     num_classes_aux = 0
     drop_rate = 0.
     drop_path_rate = 0.
-    n_channels = 3
+    n_channels = 1
     reduce_stride = False
     pooling = "avg"
     head_3d = "lstm_side" if n_frames > 1 else ""
@@ -145,15 +145,15 @@ class Config:
     }
 
     optimizer_config = {
-        "name": "Ranger",
-        "lr": 1e-3,
+        "name": "Adam",
+        "lr": 2e-4,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
         "weight_decay": 0.0,
     }
 
-    epochs = 10
+    epochs = 5
 
     use_fp16 = True
     verbose = 1

@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+import model_zoo.dsnt as dsnt
+
 from data.transforms import get_transfos
 from torch.utils.data import DataLoader
 
@@ -63,6 +65,9 @@ def predict(
                 y_pred = y_pred.view(y_pred.size(0), -1, 3)
             elif loss_config["activation"] == "study":
                 y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
+            elif loss_config["activation"] == "dsnt":
+                y_pred = dsnt.flat_softmax(y_pred)
+                y_pred = (dsnt.dsnt(y_pred) + 1) / 2  # coords in [0, 1]
             # elif loss_config["activation"] == "softmax":
             #     y_pred = y_pred.softmax(-1)
             # else:

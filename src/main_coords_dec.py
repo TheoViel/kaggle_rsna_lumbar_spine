@@ -4,7 +4,7 @@ import torch
 import warnings
 import argparse
 
-from data.preparation import prepare_data_crop
+from data.preparation import prepare_coords_data
 from util.torch import init_distributed
 from util.logger import (
     create_logger,
@@ -14,7 +14,7 @@ from util.logger import (
     get_last_log_folder,
 )
 
-from params import DATA_PATH
+# from params import DATA_PATH
 
 
 def parse_args():
@@ -82,78 +82,79 @@ class Config:
     seed = 42
     verbose = 1
 
-    pipe = "crop"
+    pipe = "coords"
     targets = "target"
 
     # Data
-    # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/coords_crops_0.1_2/"
-    load_in_ram = False
-    remove_noisy = False
-
+    coords_folder = "../input/coords/"
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 13
+    n_frames = 1
     stride = 1
-    aug_strength = 5
+    aug_strength = 6
     crop = False
+
     use_coords_crop = False
-    flip = False
+    load_in_ram = False
+    use_mask = False
+    use_ext = True
 
     # k-fold
     k = 4
-    # folds_file = f"../input/folds_{k}.csv"
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [0]  # , 1, 2, 3]
+    selected_folds = [0, 1, 2, 3]
 
-    # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
+    # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium maxvit_tiny_tf_384
+    # name = "coatnet_rmlp_2_rw_384"
     name = "coatnet_1_rw_224"
-    pretrained_weights = "../logs/2024-09-19/17/"  # PRETRAINED_WEIGHTS[name]  # None
+    use_decoder = True
+    pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
-    num_classes = 15
+    num_classes = 5
     num_classes_aux = 0
     drop_rate = 0.
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    pooling = "avg"
-    head_3d = "lstm_side" if n_frames > 1 else ""
+    pooling = "flatten"
+    head_3d = "lstm" if n_frames > 1 else ""
 
     # Training
     loss_config = {
-        "name": "series",
+        "name": "dsnt",
         "weighted": False,
         "use_any": False,
         "smoothing": 0.0,
-        "activation": "series",
-        "aux_loss_weight": 0.0,
-        "name_aux": "patient",
+        "activation": "dsnt",
+        "aux_loss_weight": 0.,
+        "name_aux": "",
         "smoothing_aux": 0.0,
-        "activation_aux": "",
+        "activation_aux": "sigmoid",
     }
 
     data_config = {
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 1.0,  # 1.0
-        "sched": False,
-        "mix_alpha": 0.4,
+        "mix_proba": 0.,
+        "sched": True,
+        "mix_alpha": 4,
         "additive_mix": False,
-        "num_classes": 3,
+        "num_classes": 2,
+        "num_classes_aux": 0,
         "num_workers": 8,
     }
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 1e-3,
+        "lr": 2e-4,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
         "weight_decay": 0.0,
     }
 
-    epochs = 10
+    epochs = 20
 
     use_fp16 = True
     verbose = 1
@@ -165,7 +166,6 @@ class Config:
 
 if __name__ == "__main__":
     warnings.simplefilter("ignore", UserWarning)
-    warnings.simplefilter("ignore", FutureWarning)
 
     config = Config
     init_distributed(config)
@@ -191,7 +191,6 @@ if __name__ == "__main__":
         else:
             time.sleep(2)
             log_folder = get_last_log_folder(LOG_PATH)
-    #             print(log_folder)
 
     if args.model:
         config.name = args.model
@@ -233,26 +232,30 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
-    df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder)
+    df = prepare_coords_data(config.coords_folder, use_ext=config.use_ext)
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)
 
-    if len(config.selected_folds) == 4:
-        if config.local_rank == 0:
-            print("\n -> Inference\n")
+    # if len(config.selected_folds) == 4:
+    #     if config.local_rank == 0:
+    #         print("\n -> Inference\n")
 
-        # log_folder = "../logs/2024-09-11/20/"
+    #     from inference.lvl1 import kfold_inference
 
-        from inference.lvl1 import kfold_inference_crop
-        kfold_inference_crop(
-            df,
-            log_folder,
-            use_fp16=config.use_fp16,
-            save=True,
-            distributed=True,
-            config=config,
-        )
+    #     df = prepare_coords_data(config.coords_folder)
+
+    #     # log_folder = "../logs/2024-08-06/17/"
+
+    #     kfold_inference(
+    #         df,
+    #         log_folder,
+    #         use_fp16=config.use_fp16,
+    #         save=True,
+    #         distributed=True,
+    #         config=config,
+    #         use_aux=True,
+    #     )
 
     if config.local_rank == 0:
         print("\nDone !")

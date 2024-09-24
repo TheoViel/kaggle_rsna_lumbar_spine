@@ -1,5 +1,4 @@
 import gc
-import glob
 import torch
 import numpy as np
 import pandas as pd
@@ -8,12 +7,14 @@ from torch.nn.parallel import DistributedDataParallel
 from training.train import fit
 from model_zoo.models import define_model
 from model_zoo.models_bi import define_model_bi
+from model_zoo.models_dec import define_model as define_model_dec
+from model_zoo.models_dec_cls import define_model as define_model_dec_cls
 
 from data.dataset import CropDataset, ImageDataset, CoordsDataset, CropSagAxDataset
 from data.transforms import get_transfos
 
 from util.torch import seed_everything, count_parameters, save_model_weights
-from params import NOISY_SERIES
+from params import NOISY_STUDIES
 
 
 def train(config, df_train, df_val, fold, log_folder=None, run=None):
@@ -41,11 +42,12 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
     else:
         dataset_class = ImageDataset
 
+    use_coords_target = config.use_coords_tgt if hasattr(config, "use_coords_tgt") else False
     transfos = get_transfos(
         strength=config.aug_strength,
         resize=config.resize,
         crop=config.crop,
-        use_keypoints="coords" in config.pipe,
+        use_keypoints="coords" in config.pipe or use_coords_target,
     )
     train_dataset = dataset_class(
         df_train,
@@ -57,13 +59,15 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         use_coords_crop=config.use_coords_crop,
         train=True,
         load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
+        flip=config.flip if hasattr(config, "flip") else False,
+        use_coords_target=use_coords_target,
     )
 
     transfos = get_transfos(
         augment=False,
         resize=config.resize,
         crop=config.crop,
-        use_keypoints="coords" in config.pipe,
+        use_keypoints="coords" in config.pipe or use_coords_target,
     )
     val_dataset = dataset_class(
         df_val,
@@ -75,21 +79,25 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         use_coords_crop=config.use_coords_crop,
         train=False,
         load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
+        use_coords_target=use_coords_target,
     )
 
     if config.pretrained_weights is not None:
-        if config.pretrained_weights.endswith(
-            ".pt"
-        ) or config.pretrained_weights.endswith(".bin"):
+        if any([config.pretrained_weights.endswith(k) for k in ['.pth', '.pt', ".bin"]]):
             pretrained_weights = config.pretrained_weights
         else:  # folder
-            pretrained_weights = glob.glob(config.pretrained_weights + f"*_{fold}.pt")[
-                0
-            ]
+            pretrained_weights = config.pretrained_weights + f"{config.name}_{fold}.pt"
     else:
         pretrained_weights = None
 
     model_fct = define_model_bi if "bi" in config.pipe else define_model
+    if hasattr(config, "use_decoder"):
+        if config.use_decoder:
+            model_fct = define_model_dec
+    if hasattr(config, "use_decoder_cls"):
+        if config.use_decoder_cls:
+            model_fct = define_model_dec_cls
+
     model = model_fct(
         config.name,
         drop_rate=config.drop_rate,
@@ -187,7 +195,7 @@ def k_fold(config, df, log_folder=None, run=None):
 
             if hasattr(config, "remove_noisy"):
                 if config.remove_noisy:
-                    df_train = df_train[~df_train['series_id'].isin(NOISY_SERIES)]
+                    df_train = df_train[~df_train['study_id'].isin(NOISY_STUDIES)]
                     df_train = df_train.reset_index(drop=True)
 
             # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
@@ -208,7 +216,7 @@ def k_fold(config, df, log_folder=None, run=None):
                     )
                     # df_train = df_train.merge(df_preds_coords, how="left")
                     # df_train['coords'] = df_train.apply(
-                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]],
+                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]]
                     #     axis=1
                     # )
 
