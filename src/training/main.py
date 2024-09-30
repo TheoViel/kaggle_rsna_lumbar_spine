@@ -60,6 +60,7 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         train=True,
         load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
         flip=config.flip if hasattr(config, "flip") else False,
+        use_with_coords=config.use_with_coords if hasattr(config, "use_with_coords") else False,
         use_coords_target=use_coords_target,
     )
 
@@ -198,8 +199,26 @@ def k_fold(config, df, log_folder=None, run=None):
                     df_train = df_train[~df_train['study_id'].isin(NOISY_STUDIES)]
                     df_train = df_train.reset_index(drop=True)
 
-            # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
+            if hasattr(config, "pl_folder"):
+                if config.pl_folder:
+                    file = config.pl_folder + f'preds_crop_{fold}.csv'
+                    df_pl = pd.read_csv(file)
+                    df_pl['target'] = df_pl.apply(
+                        lambda r: r[df_pl.columns[-15:]].values.reshape(-1, 3), axis=1
+                    )
+                    df_pl = df_pl[
+                        df_pl['target'].apply(lambda x: x[:, 0].min() < 0.9)
+                    ].reset_index(drop=True)
+                    df_pl['side'] = 'Center'
+                    df_pl['coords'] = -1
+                    df_pl['with_coords'] = 1
 
+                    if config.local_rank == 0:
+                        print(f'- Loading {len(df_pl)} PLs from {file}\n')
+
+                    df_train = pd.concat([df_train, df_pl], ignore_index=True)
+
+            # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
             # df_train = df_val.copy()
             # if len(df) <= 1000:
             #     df_train, df_val = df, df

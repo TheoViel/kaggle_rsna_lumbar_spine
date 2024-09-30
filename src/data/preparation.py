@@ -30,7 +30,8 @@ def prepare_data(data_path="../input/"):
     df["img_path"] = df["study_id"].astype(str) + "_" + df["series_id"].astype(str)
     df["img_path"] = data_path + "npy2/" + df["img_path"] + ".npy"
 
-    labels = pd.read_csv(data_path + "train_label_coordinates.csv")
+    # labels = pd.read_csv(data_path + "train_label_coordinates.csv")
+    labels = pd.read_csv(data_path + "train_pred_coordinates.csv")
     labels = labels.groupby(["study_id", "series_id"]).agg(list).reset_index()
 
     frames = pd.read_csv("../input/df_frames.csv")
@@ -357,8 +358,37 @@ def simplify_coords(x):
     return coords
 
 
+def get_targets_with_coords(row):
+    try:
+        conditions_levels = [c + " " + l for c, l in zip(row.condition, row.level)]
+    except TypeError:
+        conditions_levels = []
+
+    with_coords = np.zeros((5, 5), dtype=np.uint8)
+    for i, c in enumerate([
+        "Spinal Canal Stenosis",
+        "Left Neural Foraminal Narrowing",
+        "Right Neural Foraminal Narrowing",
+        "Left Subarticular Stenosis",
+        "Right Subarticular Stenosis",
+    ]):
+        for j, level in enumerate(LEVELS):
+            if c + " " + level in conditions_levels:
+                with_coords[j, i] = 1
+
+    if row.orient == "Sagittal":
+        with_coords[:, 3] = with_coords[:, [0, 1]].max(-1)  # override ss
+        with_coords[:, 4] = with_coords[:, [0, 2]].max(-1)  # override ss
+    return with_coords
+
+
 def prepare_data_crop(data_path, crop_folder=None, axial=False):
     df = prepare_data(data_path)
+
+    # With coords annots
+    df['with_coords'] = df.apply(get_targets_with_coords, axis=1)
+
+    # Assume everything annotated
     df['level'] = [["L1/L2", "L2/L3", "L3/L4", "L4/L5", "L5/S1"] for _ in range(len(df))]
     df['side'] = "Center"
 
@@ -381,6 +411,8 @@ def prepare_data_crop(data_path, crop_folder=None, axial=False):
     df = df.explode("level").reset_index(drop=True)
     df["target"] = df.apply(get_target_crop, axis=1)
     df.drop(df_train.columns[1:], axis=1, inplace=True)
+
+    df['with_coords'] = df.apply(lambda x: x.with_coords[LEVELS.index(x.level)], axis=1)
 
     if crop_folder is not None:
         df["img_path"] = df["study_id"].astype(str) + "_" + df["series_id"].astype(str)

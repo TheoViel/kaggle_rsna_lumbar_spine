@@ -99,11 +99,11 @@ class Config:
 
     # k-fold
     k = 4
-    folds_file = f"../input/folds_{k}.csv"
+    folds_file = "../input/train_folded_v1.csv"
     selected_folds = [0]  # , 1, 2, 3]
 
     # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium
-    name = "coat_lite_medium"
+    name = "coatnet_1_rw_224"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
     num_classes = 6

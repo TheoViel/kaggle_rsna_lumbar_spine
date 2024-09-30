@@ -101,7 +101,7 @@ class Config:
 
     # k-fold
     k = 4
-    folds_file = f"../input/folds_{k}.csv"
+    folds_file = "../input/train_folded_v1.csv"
     selected_folds = [0]  # , 1, 2, 3]
 
     # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium
@@ -111,7 +111,7 @@ class Config:
 
     num_classes = 3
     num_classes_aux = 2
-    drop_rate = 0.2
+    drop_rate = 0.
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
@@ -125,7 +125,7 @@ class Config:
         "use_any": False,
         "smoothing": 0.0,
         "activation": "series",
-        "aux_loss_weight": 0.01,
+        "aux_loss_weight": 0.5,
         "name_aux": "dsnt",
         "smoothing_aux": 0.0,
         "activation_aux": "",

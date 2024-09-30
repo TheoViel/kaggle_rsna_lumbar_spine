@@ -72,6 +72,7 @@ class ImageDataset(Dataset):
         load_in_ram=True,
         train=False,
         use_coords_target=False,
+        use_with_coords=False,
         **kwargs,
     ):
         """
@@ -108,6 +109,13 @@ class ImageDataset(Dataset):
             except TypeError:
                 self.coords = df["coords"].values
             self.sides = df['side'].values
+
+        self.use_with_coords = use_with_coords
+        if "with_coords" in df.columns and use_with_coords:
+            try:
+                self.with_coords = df["with_coords"].apply(np.vstack).values
+            except TypeError:
+                self.with_coords = df["with_coords"].values
 
         self.load_in_ram = load_in_ram
         self.load_imgs_in_ram()
@@ -262,6 +270,8 @@ class CropDataset(ImageDataset):
         load_in_ram=True,
         train=False,
         flip=False,
+        use_with_coords=False,
+        use_coords_target=False,
     ):
         """
         Constructor for the CropDataset class.
@@ -283,9 +293,13 @@ class CropDataset(ImageDataset):
             stride=stride,
             load_in_ram=load_in_ram,
             train=train,
+            use_with_coords=use_with_coords,
         )
-        if isinstance(self.targets[0], list):
-            self.targets = np.vstack(self.targets)
+        try:
+            if isinstance(self.targets[0], list):
+                self.targets = np.vstack(self.targets)
+        except ValueError:  # will not work with PL
+            pass
 
         try:
             if "coords_crops" in df["img_path"][0]:
@@ -343,7 +357,7 @@ class CropDataset(ImageDataset):
                 if self.coords_crop[idx].max() > 0:
                     gt_frame = self.coords_crop[idx][0]
 
-            if np.abs(frame - gt_frame) <= 3:  # Noisy
+            if np.abs(frame - gt_frame) <= 4:  # Noisy
                 frame = gt_frame
 
         if self.train:
@@ -371,16 +385,24 @@ class CropDataset(ImageDataset):
             transformed = self.transforms(image=image)
             image = transformed["image"]
 
-        tgt = self.targets[idx]
+        tgt = np.array(self.targets[idx])
         if isinstance(self.targets[idx], (int, float, np.int64, np.int32)):
             y = torch.zeros(3, dtype=torch.float)
             if tgt > -1:
                 y[tgt] = 1
+        elif len(tgt.shape) == 2:  # PL - no need to one-hot encode
+            y = torch.from_numpy(tgt.astype(np.float32))
         else:
             y = torch.zeros((len(tgt), 3), dtype=torch.float)
             for i in range(len(tgt)):
                 if tgt[i] > -1:
                     y[i, tgt[i]] = 1
+
+        # print(tgt.shape, y.shape)
+
+        if self.use_with_coords:
+            mask = self.with_coords[idx].flatten()[:, None].repeat(3, 1)
+            y = np.where(mask, y, 0)  # -1 where no coords
 
         # Reshape
         if self.frames_chanel:

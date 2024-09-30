@@ -33,7 +33,7 @@ class SmoothCrossEntropyLoss(nn.Module):
             targets = torch.clamp(targets, min=0)
             targets = torch.zeros_like(inputs).scatter(1, targets.view(-1, 1).long(), 1)
         else:
-            mask = (targets.sum(-1) == 0)
+            mask = (targets.sum(-1) <= 0)
 
         if self.eps > 0:
             n_class = inputs.size(1)
@@ -43,8 +43,6 @@ class SmoothCrossEntropyLoss(nn.Module):
 
         loss = -targets * F.log_softmax(inputs, dim=1)
 
-        # if len(loss.size()) == 2 and len(mask.size()) == 1:  # In case it was one-hot encoded
-        #     mask = mask.unsqueeze(-1).repeat(1, loss.size(1))
         loss = loss.sum(-1).masked_fill(mask, 0)
         return loss
 
@@ -104,7 +102,7 @@ class SeriesLoss(nn.Module):
 
         targets = targets.view(-1, 3)  # bs * n_classes x 3
 
-        mask = (targets.sum(-1) == 0)
+        mask = (targets.sum(-1) <= 0)
 
         inputs = inputs.view(inputs.size(0), -1, 3).reshape(-1, 3)
         # bs x n_classes * 3 -> bs * n_classes x 3
@@ -315,16 +313,11 @@ class SpineLoss(nn.Module):
         """
         pred, pred_aux, y, y_aux = self.prepare(pred, pred_aux, y, y_aux)
 
-        # print(pred.size())
-        # print(pred_aux.size())
-        # print(y.size())
-        # print(y_aux.size())
-
         loss = self.loss(pred, y)
 
         if self.aux_loss_weight > 0:
             loss_aux = self.loss_aux(pred_aux, y_aux)
-            loss = (1 - self.aux_loss_weight) * loss.mean() + self.aux_loss_weight * loss_aux.mean()
+            return (1 - self.aux_loss_weight) * loss.mean() + self.aux_loss_weight * loss_aux.mean()
 
         return loss.mean()
 

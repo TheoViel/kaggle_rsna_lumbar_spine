@@ -87,7 +87,11 @@ class Config:
 
     # Data
     # crop_folder = "../input/crops_fix/"
-    crop_folder = "../input/crops_ax_0.15/"
+    crop_folder = "../input/crops_ax_f/"
+    load_in_ram = False
+    remove_noisy = False
+
+    pl_folder = ""  # "../output/spider_pl/"
 
     resize = (224, 224)
     frames_chanel = 1
@@ -96,7 +100,7 @@ class Config:
     aug_strength = 5
     crop = True
     use_coords_crop = False
-    load_in_ram = True
+    load_in_ram = False
 
     # k-fold
     k = 4
@@ -230,6 +234,7 @@ if __name__ == "__main__":
         print("\n -> Training\n")
 
     df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder, axial=True)
+    df = df[df['img_path'].apply(os.path.exists)].reset_index(drop=True)
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)

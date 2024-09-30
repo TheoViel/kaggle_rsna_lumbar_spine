@@ -19,7 +19,7 @@ cd src
 # torchrun --nproc_per_node=4 main_crop.py
 # torchrun --nproc_per_node=4 main_spinenet.py
 
-# torchrun --nproc_per_node=4 main_crop_ax.py
+torchrun --nproc_per_node=4 main_crop_ax.py
 
 # torchrun --nproc_per_node=4 main_crop_scs.py
 # echo
@@ -37,4 +37,4 @@ cd src
 
 # torchrun --nproc_per_node=4 main_crop_bi.py
 # torchrun --nproc_per_node=4 main_ss_dec.py
-torchrun --nproc_per_node=4 main_ss.py
+# torchrun --nproc_per_node=4 main_ss.py

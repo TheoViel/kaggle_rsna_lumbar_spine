@@ -25,7 +25,7 @@ def disk_auc(truths, preds):
             try:
                 auc = roc_auc_score(truths == i, preds[:, i])
             except ValueError:
-                auc = 1
+                auc = 0.5
             aucs.append(auc)
     else:
         raise NotImplementedError

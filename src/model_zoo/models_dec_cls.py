@@ -110,6 +110,12 @@ class SegWrapper(nn.Module):
 
         self.logits = nn.Linear(self.model.decoder_out_channels, num_classes)
 
+        self.skip_dense = nn.Linear(
+            self.model.encoder.out_channels[-1], self.model.decoder_out_channels
+        )
+
+        self.dense_masks = nn.Linear(1, 1)
+
     def forward_head_3d(self, x):
         """
         Forward function for the 3D head.
@@ -155,13 +161,20 @@ class SegWrapper(nn.Module):
 
         masks = self.model.segmentation_head(dec_fts[:, n_frames // 2])
 
-        pooled_fts = (
-            dec_fts.unsqueeze(2).repeat(1, 1, self.num_masks, 1, 1, 1) *
-            masks.unsqueeze(1).repeat(1, n_frames, 1, 1, 1).unsqueeze(3)
-        )  # bs x n_frames x c x ft x h x w
-        pooled_fts = pooled_fts.sum((-1, -2))
+        pooling_masks = self.dense_masks(masks.unsqueeze(-1)).squeeze(-1)
+        pooling_masks = pooling_masks.flatten(-2, -1).softmax(-1)
+        pooling_masks = pooling_masks.unsqueeze(1).repeat(1, n_frames, 1, 1).unsqueeze(3)
 
-        pooled_fts = pooled_fts.transpose(1, 2).flatten(0, 1)
+        pooled_fts = (
+            dec_fts.flatten(-2, -1).unsqueeze(2).repeat(1, 1, self.num_masks, 1, 1) *
+            pooling_masks
+        )  # bs x n_frames x c x ft x h * w
+        pooled_fts = pooled_fts.sum(-1) / pooling_masks.sum(-1)
+
+        skip_fts = self.skip_dense(features[-1].mean((-1, -2))).view(bs, n_frames, -1)
+        pooled_fts += skip_fts.unsqueeze(2)
+
+        pooled_fts = pooled_fts.transpose(1, 2).flatten(0, 1)  # bs * c x n_frames x ft
 
         if self.head_3d == "lstm":
             # print(pooled_fts.size())

@@ -227,7 +227,6 @@ def fit(
             if (step % verbose_eval) == 0 or step - 1 >= epochs * len(train_loader):
                 if 0 <= epochs * len(train_loader) - step < verbose_eval:
                     continue
-
                 avg_losses = torch.stack(avg_losses)
                 if distributed:
                     avg_losses = sync_across_gpus(avg_losses, world_size)

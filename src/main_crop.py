@@ -91,6 +91,8 @@ class Config:
     load_in_ram = False
     remove_noisy = False
 
+    pl_folder = ""  # "../output/spider_pl/"
+
     resize = (224, 224)
     frames_chanel = 1
     n_frames = 13
@@ -100,6 +102,8 @@ class Config:
     use_coords_crop = False
     flip = False
 
+    use_with_coords = False  # TODO - NGC
+
     # k-fold
     k = 4
     # folds_file = f"../input/folds_{k}.csv"
@@ -108,7 +112,7 @@ class Config:
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"
-    pretrained_weights = "../logs/2024-09-19/17/"  # PRETRAINED_WEIGHTS[name]  # None
+    pretrained_weights = None  # "../logs/2024-09-19/17/"
 
     num_classes = 15
     num_classes_aux = 0
