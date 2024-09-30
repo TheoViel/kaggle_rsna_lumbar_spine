@@ -779,6 +779,7 @@ class FeatureDataset(Dataset):
             "crop": np.zeros((5, 3)),
             "crop_bi": np.zeros((5, 3)),
             "crop_2": np.zeros((5, 3)),
+            "crop_ax": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),
             "spinenet": np.zeros((12)),
@@ -856,6 +857,8 @@ class FeatureDataset(Dataset):
         for exp in self.exp_folders:
             series_k = exp.split("_")[0]
             series_k = [series_k] if series_k in ["ss", "nfn", "scs"] else ["nfn", "scs"]  # "ss"
+            if "ax" in exp:
+                series_k = ["ss"]
 
             if "crop" in exp:
                 sides = ["Left", "Right"] if "nfn" in exp or "ss" in exp else ['Center']

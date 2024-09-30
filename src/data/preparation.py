@@ -30,8 +30,8 @@ def prepare_data(data_path="../input/"):
     df["img_path"] = df["study_id"].astype(str) + "_" + df["series_id"].astype(str)
     df["img_path"] = data_path + "npy2/" + df["img_path"] + ".npy"
 
-    # labels = pd.read_csv(data_path + "train_label_coordinates.csv")
-    labels = pd.read_csv(data_path + "train_pred_coordinates.csv")
+    labels = pd.read_csv(data_path + "train_label_coordinates.csv")
+    # labels = pd.read_csv(data_path + "train_pred_coordinates.csv")
     labels = labels.groupby(["study_id", "series_id"]).agg(list).reset_index()
 
     frames = pd.read_csv("../input/df_frames.csv")

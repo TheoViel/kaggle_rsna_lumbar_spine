@@ -102,13 +102,13 @@ class Config:
     use_coords_crop = False
     flip = False
 
-    use_with_coords = False  # TODO - NGC
+    use_with_coords = True  # TODO - NGC
 
     # k-fold
     k = 4
     # folds_file = f"../input/folds_{k}.csv"
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [0]  # , 1, 2, 3]
+    selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"
@@ -239,14 +239,14 @@ if __name__ == "__main__":
 
     df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder)
 
-    from training.main import k_fold
-    k_fold(config, df, log_folder=log_folder, run=run)
+    # from training.main import k_fold
+    # k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
-        # log_folder = "../logs/2024-09-11/20/"
+        log_folder = "../logs/2024-09-30/1/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

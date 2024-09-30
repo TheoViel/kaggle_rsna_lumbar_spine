@@ -54,13 +54,17 @@ def rsna_loss(truths, preds):
         t = t[t > -1]
         w = 2 ** t
         loss = (loss_fct(p, t) * w).sum() / w.sum()
+
+        # print((t == 2).float().mean(), p[:, 2].mean())
         losses.append(loss)
 
     # Any severe SCS loss
     any_pred = preds[:, :5, 2].amax(1)
     any_target = truths[:, :5].amax(1)
+
     any_w = 2 ** any_target
     any_target = (any_target == 2).long()
+    print(any_target.float().mean(), any_pred.mean())
     any_loss = - any_target * torch.log(any_pred) - (1 - any_target) * torch.log(1 - any_pred)
     any_loss = ((any_w * any_loss).sum() / any_w.sum()).item()
 
