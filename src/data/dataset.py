@@ -298,7 +298,7 @@ class CropDataset(ImageDataset):
         try:
             if isinstance(self.targets[0], list):
                 self.targets = np.vstack(self.targets)
-        except ValueError:  # will not work with PL
+        except Exception:  # will not work with PL
             pass
 
         try:
@@ -889,6 +889,7 @@ class FeatureDataset(Dataset):
 
             elif "dh" in exp or "ch" in exp:
                 ft = self.fts[exp].get(study, self.dummies[exp[:2]])
+                # ft = np.where(ft == -100, 0, ft)
 
             elif "spinenet" in exp:
                 ft = []

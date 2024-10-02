@@ -64,7 +64,7 @@ def predict(
             elif loss_config["activation"] == "series":
                 y_pred = y_pred.view(y_pred.size(0), -1, 3)
             elif loss_config["activation"] == "study":
-                y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
+                y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
             elif loss_config["activation"] == "dsnt":
                 y_pred = dsnt.flat_softmax(y_pred)
                 y_pred = (dsnt.dsnt(y_pred) + 1) / 2  # coords in [0, 1]
@@ -288,7 +288,8 @@ def kfold_inference_crop(
         )
         model = model.cuda().eval()
 
-        weights = exp_folder + f"{config.name}_{fold}.pt"
+        fold_ = 'fullfit_0'
+        weights = exp_folder + f"{config.name}_{fold_}.pt"
         model = load_model_weights(model, weights, verbose=config.local_rank == 0)
 
         df_val = df[df["fold"] == fold].reset_index(drop=True)

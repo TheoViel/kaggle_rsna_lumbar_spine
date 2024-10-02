@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+from scipy.special import softmax
 from sklearn.metrics import roc_auc_score
 
 
@@ -33,10 +34,13 @@ def disk_auc(truths, preds):
     return np.mean(aucs)
 
 
-def rsna_loss(truths, preds):
+def rsna_loss(truths, preds, verbose=0):
     assert truths.shape[1] == 25
     assert preds.shape[1] == 25
     assert preds.shape[2] == 3
+
+    if preds.min() < 0:
+        preds = softmax(preds, -1)
 
     preds = np.clip(preds, 1e-7, 1 - 1e-7)
 
@@ -60,7 +64,14 @@ def rsna_loss(truths, preds):
     any_pred = preds[:, :5, 2].amax(1)
     any_target = truths[:, :5].amax(1)
     any_w = 2 ** any_target
+
     any_target = (any_target == 2).long()
+
+    if verbose:
+        print(f"tgt  any mean {any_target.float().mean().item() :.3f}")
+        print(f'pred any mean {any_pred.mean().item() :.3f}')
+        print()
+
     any_loss = - any_target * torch.log(any_pred) - (1 - any_target) * torch.log(1 - any_pred)
     any_loss = ((any_w * any_loss).sum() / any_w.sum()).item()
 

@@ -98,9 +98,9 @@ class Config:
     n_frames = 3
     stride = 1
     aug_strength = 5
-    crop = True
+    crop = False
     use_coords_crop = False
-    load_in_ram = False
+    load_in_ram = True
 
     # k-fold
     k = 4
@@ -117,7 +117,7 @@ class Config:
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
-    pooling = "avg_h"
+    pooling = "avg"
     head_3d = "lstm" if n_frames > 1 else ""
 
     # Training
@@ -147,14 +147,14 @@ class Config:
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4,
+        "lr": 1e-3,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
         "weight_decay": 0.0,
     }
 
-    epochs = 5
+    epochs = 10
 
     use_fp16 = True
     verbose = 1

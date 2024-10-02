@@ -65,7 +65,7 @@ def evaluate(
             elif loss_config["activation"] == "softmax":
                 y_pred = y_pred.softmax(-1)
             elif loss_config["activation"] in ["series", "study"]:
-                y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
+                y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
             elif loss_config["activation"] == "dsnt":
                 y_pred = dsnt.flat_softmax(y_pred)
                 y_pred = (dsnt.dsnt(y_pred) + 1) / 2  # coords in [0, 1]
