@@ -102,7 +102,7 @@ class Config:
     use_coords_crop = False
     flip = False
 
-    use_with_coords = True  # TODO - NGC
+    use_with_coords = False  # TODO - NGC
 
     # k-fold
     k = 4
@@ -157,7 +157,7 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 10
+    epochs = 20
 
     use_fp16 = True
     verbose = 1
@@ -239,14 +239,14 @@ if __name__ == "__main__":
 
     df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder)
 
-    # from training.main import k_fold
-    # k_fold(config, df, log_folder=log_folder, run=run)
+    from training.main import k_fold
+    k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
-        log_folder = "../logs/2024-09-30/1/"
+        # log_folder = "../logs/2024-09-30/1/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

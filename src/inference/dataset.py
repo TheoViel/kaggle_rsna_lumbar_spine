@@ -111,7 +111,9 @@ class FeatureInfDataset(FeatureDataset):
             "scs_crop": np.zeros(3),
             "nfn_crop": np.zeros(3),
             "crop": np.zeros((5, 3)),
+            "crop_2": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
+            "dh_2": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),
         }
 

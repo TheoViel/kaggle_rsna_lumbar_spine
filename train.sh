@@ -16,12 +16,12 @@ cd src
 # torchrun --nproc_per_node=4 main_crop.py --lr 3e-3
 # torchrun --nproc_per_node=4 main_crop.py --model coatnet_2_rw_224
 
-torchrun --nproc_per_node=4 main_crop.py
+# torchrun --nproc_per_node=4 main_crop.py
 # torchrun --nproc_per_node=4 main_spinenet.py
 
 # torchrun --nproc_per_node=4 main_crop_ax.py
 
-# torchrun --nproc_per_node=4 main_crop_scs.py
+torchrun --nproc_per_node=4 main_crop_scs.py
 # echo
 # torchrun --nproc_per_node=4 main_crop_nfn.py
 # torchrun --nproc_per_node=4 main_crop_nfn.py --model coatnet_2_rw_224

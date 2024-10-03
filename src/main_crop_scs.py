@@ -86,13 +86,13 @@ class Config:
     targets = "target"
 
     # Data
-    crop_folder = "../input/crops_fix/"
+    # crop_folder = "../input/crops_fix/"
     # crop_folder = "../input/coords_crops_0.1_spinenet/"
-    # crop_folder = "../input/coords_crops_0.1_2/"
+    crop_folder = "../input/coords_crops_0.1_2/"
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 7
+    n_frames = 3
     stride = 1
     aug_strength = 3
     crop = False
@@ -152,13 +152,13 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 10
+    epochs = 5
 
     use_fp16 = True
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = False
+    fullfit = True
     n_fullfit = 1
 
 

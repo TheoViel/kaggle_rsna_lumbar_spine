@@ -64,7 +64,7 @@ def rsna_loss(truths, preds):
 
     any_w = 2 ** any_target
     any_target = (any_target == 2).long()
-    print(any_target.float().mean(), any_pred.mean())
+    # print(any_target.float().mean(), any_pred.mean())
     any_loss = - any_target * torch.log(any_pred) - (1 - any_target) * torch.log(1 - any_pred)
     any_loss = ((any_w * any_loss).sum() / any_w.sum()).item()
 

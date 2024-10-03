@@ -95,16 +95,16 @@ class SimpleModel(nn.Module):
         """
         ref_k = list(x.keys())[0]
         bs = x[ref_k].size(0)
-
-        # print(fts.size())
-
         logits = torch.zeros(bs, 25, 3).to(x[ref_k].device)
 
-        # fts = x["dd_v1"].view(bs, 25, 3)
         if "crop_2" in x.keys():
             x["crop"] = (x["crop"] + x["crop_2"]) / 2
             del x["crop_2"]
-        # x['dh'][:, -10:] = 0
+
+        # if "scs_crop_coords_2" in x.keys() and "scs_crop_coords" in x.keys():
+        #     x["scs_crop_coords"] = (x["scs_crop_coords"] + x["scs_crop_coords_2"]) / 2
+        #     del x["scs_crop_coords_2"]
+        
         if "dh_2" in x.keys():
             x['dh'][:, -10:] = x['dh_2'][:, -10:]
             del x['dh_2']
@@ -117,9 +117,6 @@ class SimpleModel(nn.Module):
             ],
             -1,
         )
-
-        # print(fts.size())
-        # print(x['spinenet'].size())
 
         fts_scs = torch.cat(
             [fts[:, :5]] +
