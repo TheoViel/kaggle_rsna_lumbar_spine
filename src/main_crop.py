@@ -90,6 +90,7 @@ class Config:
     crop_folder = "../input/coords_crops_0.1_2/"
     load_in_ram = False
     remove_noisy = False
+    fix_train_crops = True
 
     pl_folder = None  # ""  # "../output/spider_pl/"
 
@@ -100,15 +101,14 @@ class Config:
     aug_strength = 5
     crop = False
     use_coords_crop = False
-    flip = False
-
-    use_with_coords = False  # TODO - NGC
+    flip = True
+    use_with_coords = False
 
     # k-fold
     k = 4
     # folds_file = f"../input/folds_{k}.csv"
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [0]  # , 1, 2, 3]
+    selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
     name = "coatnet_1_rw_224"
@@ -122,6 +122,7 @@ class Config:
     reduce_stride = False
     pooling = "avg"
     head_3d = "lstm_side" if n_frames > 1 else ""
+    delta = 2
 
     # Training
     loss_config = {
@@ -134,6 +135,7 @@ class Config:
         "name_aux": "patient",
         "smoothing_aux": 0.0,
         "activation_aux": "",
+        "ousm_k": 0,
     }
 
     data_config = {
@@ -240,13 +242,13 @@ if __name__ == "__main__":
     df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder)
 
     from training.main import k_fold
-    # k_fold(config, df, log_folder=log_folder, run=run)
+    k_fold(config, df, log_folder=log_folder, run=run)
 
-    if True:
+    if len(config.selected_folds) == 4:
         if config.local_rank == 0:
             print("\n -> Inference\n")
 
-        log_folder = "../output/2024-09-13_7/"
+        # log_folder = "../logs/2024-10-04/9/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

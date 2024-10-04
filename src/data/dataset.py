@@ -374,9 +374,6 @@ class CropDataset(ImageDataset):
             max_frame=len(img) - 1,
         )
 
-        # if self.sides[idx] != 4 and self.train and np.random.random() < 0.5:
-        #     frames = frames[::-1]  # flip aug
-
         image = img[np.array(frames)].transpose(1, 2, 0)
         image = image.astype(np.float32) / 255.0
 
@@ -398,8 +395,6 @@ class CropDataset(ImageDataset):
                 if tgt[i] > -1:
                     y[i, tgt[i]] = 1
 
-        # print(tgt.shape, y.shape)
-
         if self.use_with_coords:
             mask = self.with_coords[idx].flatten()[:, None].repeat(3, 1)
             y = np.where(mask, y, 0)  # -1 where no coords
@@ -412,15 +407,10 @@ class CropDataset(ImageDataset):
         if self.n_frames == 1:
             image = image[0]
 
-        # print(frames, len(img))
-
         if np.random.random() < 0.5 and self.flip:
-            # print('flip')
-            if y.size(0) == 2:
-                y = torch.flip(y, [0])
-            else:
+            if y.size(0) == 5:
                 y = y[[0, 2, 1, 4, 3]].contiguous()
-            image = torch.flip(image, [1])
+            image = torch.flip(image, [0])
 
         return image, y, 0
 
@@ -779,6 +769,8 @@ class FeatureDataset(Dataset):
             "crop": np.zeros((5, 3)),
             "crop_bi": np.zeros((5, 3)),
             "crop_2": np.zeros((5, 3)),
+            "crop_3": np.zeros((5, 3)),
+            "crop_4": np.zeros((5, 3)),
             "dh": np.zeros((25, 3)),
             "ch": np.zeros((25, 3)),
             "spinenet": np.zeros((12)),

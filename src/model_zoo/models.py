@@ -23,6 +23,7 @@ def define_model(
     drop_path_rate=0,
     pooling="avg",
     head_3d="",
+    delta=2,
     n_frames=1,
     verbose=1,
 ):
@@ -103,6 +104,7 @@ def define_model(
         pooling=pooling,
         head_3d=head_3d,
         n_frames=n_frames,
+        delta=delta,
     )
     model.name = name
 
@@ -151,6 +153,7 @@ class ClsModel(nn.Module):
         pooling="avg",
         head_3d="",
         n_frames=1,
+        delta=2,
     ):
         """
         Constructor for the classification model.
@@ -165,6 +168,7 @@ class ClsModel(nn.Module):
         self.n_channels = n_channels
         self.pooling = pooling
         self.head_3d = head_3d
+        self.delta = delta
 
         self.dense = nn.Identity()
         if pooling == "gem":

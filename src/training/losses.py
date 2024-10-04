@@ -223,6 +223,8 @@ class SpineLoss(nn.Module):
         self.config = config
         self.device = device
 
+        self.ousm_k = config.get('ousm_k', 0)
+
         self.aux_loss_weight = config["aux_loss_weight"]
         self.eps = config.get("smoothing", 0)
         self.eps_aux = config.get("smoothing_aux", 0)
@@ -314,6 +316,10 @@ class SpineLoss(nn.Module):
         pred, pred_aux, y, y_aux = self.prepare(pred, pred_aux, y, y_aux)
 
         loss = self.loss(pred, y)
+
+        if self.ousm_k:
+            _, idxs = loss.topk(loss.size(0) - self.ousm_k, largest=False)
+            loss = loss.index_select(0, idxs)
 
         if self.aux_loss_weight > 0:
             loss_aux = self.loss_aux(pred_aux, y_aux)

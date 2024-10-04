@@ -105,6 +105,7 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         drop_path_rate=config.drop_path_rate,
         pooling=config.pooling if hasattr(config, "pooling") else "avg",
         head_3d=config.head_3d,
+        delta=config.delta if hasattr(config, "delta") else 2,
         n_frames=config.n_frames,
         num_classes=config.num_classes,
         num_classes_aux=config.num_classes_aux,
@@ -217,6 +218,13 @@ def k_fold(config, df, log_folder=None, run=None):
                         print(f'- Loading {len(df_pl)} PLs from {file}\n')
 
                     df_train = pd.concat([df_train, df_pl], ignore_index=True)
+
+            if hasattr(config, "fix_train_crops"):
+                if config.fix_train_crops:
+                    import re
+                    df_train["img_path"] = df_train["img_path"].apply(
+                        lambda x: re.sub(config.crop_folder, config.crop_folder[:-2] + "f/", x)
+                    )
 
             # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
             # df_train = df_val.copy()

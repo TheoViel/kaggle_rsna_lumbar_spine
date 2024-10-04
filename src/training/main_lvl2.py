@@ -146,6 +146,22 @@ def k_fold(config, df, log_folder=None, run=None):
                 df_val.to_csv(log_folder + f"df_val_{fold}.csv", index=False)
 
     if len(config.selected_folds) == config.k:
+        if config.fullfit:
+            for ff in range(config.n_fullfit):
+                if config.local_rank == 0:
+                    print(
+                        f"\n-------------   Fullfit {ff + 1} / {config.n_fullfit} -------------\n"
+                    )
+                seed_everything(config.seed + ff)
+                train(
+                    config,
+                    df,
+                    df,
+                    f"fullfit_{ff}",
+                    log_folder=log_folder,
+                    run=run,
+                )
+
         avg_loss, losses = rsna_loss(df[config.targets].values, pred_oof)
         print()
         for k, v in losses.items():
@@ -153,7 +169,7 @@ def k_fold(config, df, log_folder=None, run=None):
         print(f"\n -> CV Score : {avg_loss :.4f}")
 
         if log_folder is not None:
-            np.save(log_folder + "pred_oof.npy", pred_oof)
+            np.save(log_folder + "pred_oof.npy", pred_oof)            
 
         if run is not None:
             run["global/logs"].upload(log_folder + "logs.txt")

@@ -78,6 +78,71 @@ def predict(
     return np.concatenate(preds), np.concatenate(preds_aux)
 
 
+def predict_tta(
+    model,
+    dataset,
+    loss_config,
+    batch_size=64,
+    device="cuda",
+    use_fp16=False,
+    num_workers=8,
+    flips=([1]),
+):
+    """
+    Perform inference using a single model and generate predictions for the given dataset.
+
+    Args:
+        model (torch.nn.Module): Trained model for inference.
+        dataset (torch.utils.data.Dataset): Dataset for which to generate predictions.
+        loss_config (dict): Configuration for loss function and activation.
+        batch_size (int, optional): Batch size for prediction. Defaults to 64.
+        device (str, optional): Device for inference, 'cuda' or 'cpu'. Defaults to 'cuda'.
+        use_fp16 (bool, optional): Whether to use FP16 inference. Defaults to False.
+        num_workers (int, optional): Number of worker threads for data loading. Defaults to 8.
+
+    Returns:
+        np array [N x C]: Predicted probabilities for each class for each sample.
+        list: Empty list, placeholder for the auxiliary task.
+    """
+    model.eval()
+    preds, preds_aux = [], []
+
+    loader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+    )
+
+    with torch.no_grad():
+        for x, _, _ in loader:
+            preds_tta = []
+            with torch.cuda.amp.autocast(enabled=use_fp16):
+                x = {k: x[k].cuda() for k in x} if isinstance(x, dict) else x.cuda()
+                y_pred, y_pred_aux = model(x)
+                preds_tta.append(y_pred)
+
+                for flip in flips:
+                    y_pred_tta, y_pred_aux = model(torch.flip(x, flip))
+                    if 1 in flip:
+                        if loss_config["activation"] in ["study", "series"]:
+                            y_pred_tta = y_pred_tta.view(y_pred_tta.size(0), -1, 3)
+                            y_pred_tta = y_pred_tta.transpose(0, 1)[[0, 2, 1, 4, 3]].transpose(0, 1)
+                            y_pred_tta = y_pred_tta.reshape(y_pred_tta.size(0), -1)
+                    preds_tta.append(y_pred_tta)
+
+            y_pred = torch.stack(preds_tta, 0).mean(0)
+
+            # Get probabilities
+            if loss_config["activation"] == "sigmoid":
+                y_pred = y_pred.sigmoid()
+            elif loss_config["activation"] == "series":
+                y_pred = y_pred.view(y_pred.size(0), -1, 3)
+            elif loss_config["activation"] == "study":
+                y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
+
+            preds.append(y_pred.detach().cpu().numpy())
+            preds_aux.append(y_pred_aux.detach().cpu().numpy())
+    return np.concatenate(preds), np.concatenate(preds_aux)
+
+
 class Config:
     """
     Placeholder to load a config from a saved json
@@ -279,6 +344,7 @@ def kfold_inference_crop(
             drop_path_rate=config.drop_path_rate,
             pooling=config.pooling,
             head_3d=config.head_3d,
+            delta=config.delta if hasattr(config, "delta") else 2,
             n_frames=config.n_frames,
             num_classes=config.num_classes,
             num_classes_aux=config.num_classes_aux,
@@ -288,8 +354,7 @@ def kfold_inference_crop(
         )
         model = model.cuda().eval()
 
-        fold_ = 'fullfit_0'
-        weights = exp_folder + f"{config.name}_{fold_}.pt"
+        weights = exp_folder + f"{config.name}_{fold}.pt"
         model = load_model_weights(model, weights, verbose=config.local_rank == 0)
 
         df_val = df[df["fold"] == fold].reset_index(drop=True)
@@ -313,6 +378,23 @@ def kfold_inference_crop(
             load_in_ram=False,
         )
 
+        # if config.flip or config.aug_strength > 5:  # config.flip or 
+        #     flips = []
+        #     if config.flip:
+        #         flips.append([1])
+        #     if config.aug_strength == 7:
+        #         flips.append([2])
+                
+        #     preds, preds_aux = predict_tta(
+        #         model,
+        #         dataset,
+        #         config.loss_config,
+        #         batch_size=config.data_config["val_bs"] if batch_size is None else batch_size,
+        #         use_fp16=use_fp16,
+        #         num_workers=num_workers,
+        #         flips=flips
+        #     )
+        # else:
         preds, preds_aux = predict(
             model,
             dataset,

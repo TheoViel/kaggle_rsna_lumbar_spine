@@ -86,13 +86,13 @@ class Config:
     targets = "target"
 
     # Data
-    crop_folder = "../input/crops_fix/"
+    crop_folder = "../input/coords_crops_0.1_2/"
     # crop_folder = "../input/coords_crops_0.1_spinenet/"
     # crop_folder = "../input/coords_crops_0.1_2/"
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 7
+    n_frames = 5  # 5
     stride = 1
     aug_strength = 3
     crop = False
@@ -100,13 +100,16 @@ class Config:
     remove_noisy = False
     load_in_ram = False
 
+    flip = True
+    fix_train_crops = True
+
     # k-fold
     k = 4
     folds_file = "../input/train_folded_v1.csv"  # f"../input/folds_{k}.csv"
     selected_folds = [0, 1, 2, 3]
 
     # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
-    name = "coatnet_2_rw_224"
+    name = "coatnet_1_rw_224"  # coatnet_1_rw_224
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
     num_classes = 3
@@ -152,18 +155,19 @@ class Config:
         "weight_decay": 0.0,
     }
 
-    epochs = 10
+    epochs = 5
 
     use_fp16 = True
     verbose = 1
     verbose_eval = 50 if data_config["batch_size"] >= 16 else 100
 
-    fullfit = False
+    fullfit = True
     n_fullfit = 1
 
 
 if __name__ == "__main__":
     warnings.simplefilter("ignore", UserWarning)
+    warnings.simplefilter("ignore", FutureWarning)
 
     config = Config
     init_distributed(config)
@@ -208,18 +212,18 @@ if __name__ == "__main__":
         config.data_config["val_bs"] = args.batch_size
 
     run = None
-    if config.local_rank == 0:
-        run = init_neptune(config, log_folder)
+    # if config.local_rank == 0:
+    #     run = init_neptune(config, log_folder)
 
-        if args.fold > -1:
-            config.selected_folds = [args.fold]
-            create_logger(directory=log_folder, name=f"logs_{args.fold}.txt")
-        else:
-            create_logger(directory=log_folder, name="logs.txt")
+    #     if args.fold > -1:
+    #         config.selected_folds = [args.fold]
+    #         create_logger(directory=log_folder, name=f"logs_{args.fold}.txt")
+    #     else:
+    #         create_logger(directory=log_folder, name="logs.txt")
 
-        save_config(config, log_folder + "config.json")
-        if run is not None:
-            run["global/config"].upload(log_folder + "config.json")
+    #     save_config(config, log_folder + "config.json")
+    #     if run is not None:
+    #         run["global/config"].upload(log_folder + "config.json")
 
     if config.local_rank == 0:
         print("Device :", torch.cuda.get_device_name(0), "\n")
@@ -234,10 +238,10 @@ if __name__ == "__main__":
     df = prepare_data_scs(DATA_PATH, crop_folder=config.crop_folder)
 
     from training.main import k_fold
-    k_fold(config, df, log_folder=log_folder, run=run)
+    # k_fold(config, df, log_folder=log_folder, run=run)
 
     if len(config.selected_folds) == 4:
-        # log_folder = "../logs/2024-08-29/15/"
+        log_folder = "../logs/2024-10-04/37/"
 
         if config.local_rank == 0:
             print("\n -> Inference\n")

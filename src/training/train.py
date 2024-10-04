@@ -64,7 +64,9 @@ def evaluate(
                 y_pred = y_pred.sigmoid()
             elif loss_config["activation"] == "softmax":
                 y_pred = y_pred.softmax(-1)
-            elif loss_config["activation"] in ["series", "study"]:
+            elif loss_config["activation"] == "series":
+                y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
+            elif loss_config["activation"] == "study":
                 y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
             elif loss_config["activation"] == "dsnt":
                 y_pred = dsnt.flat_softmax(y_pred)
