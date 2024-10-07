@@ -109,6 +109,14 @@ class SimpleModel(nn.Module):
             x['dh'][:, -10:] = x['dh_2'][:, -10:]
             del x['dh_2']
 
+        if "dh_3" in x.keys():
+            x['dh'][:, :5] = (x['dh'][:, :5] + x['dh_3'][:, :5]) / 2
+            del x['dh_3']
+
+        if "dh_4" in x.keys():
+            x['dh'][:, 5:15] = (x['dh'][:, 5:15] + x['dh_4'][:, 5:15]) / 2
+            del x['dh_4']
+
         fts = torch.cat(
             [
                 x[k].view(bs, 25, -1)
