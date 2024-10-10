@@ -30,7 +30,7 @@ def define_model(
         nn.Module: The defined model.
     """
     model_classes = {
-        "baseline": BaselineModel,
+        "simple_2": SimpleModel2,
         "simple": SimpleModel,
     }
     model_class = model_classes[name]
@@ -114,7 +114,7 @@ class SimpleModel(nn.Module):
             del x['dh_3']
 
         if "dh_4" in x.keys():
-            x['dh'][:, 5:15] = (x['dh'][:, 5:15] + x['dh_4'][:, 5:15]) / 2
+            x['dh'][:, :5] = (2 * x['dh'][:, :5]+ x['dh_4'][:, :5]) / 3
             del x['dh_4']
 
         fts = torch.cat(
@@ -156,18 +156,8 @@ class SimpleModel(nn.Module):
         return logits, torch.zeros(bs)
 
 
-class BaselineModel(nn.Module):
-    def __init__(
-        self,
-        ft_dim=64,
-        lstm_dim=64,
-        resize=15,
-        dense_dim=64,
-        p=0.1,
-        num_classes=8,
-        num_classes_aux=0,
-        n_fts=0,
-    ):
+class SimpleModel2(nn.Module):
+    def __init__(self, ft_dim=64, dense_dim=64, p=0.0, n_fts=0, **kwargs):
         """
         Constructor.
 
@@ -184,48 +174,32 @@ class BaselineModel(nn.Module):
         """
         super().__init__()
         self.n_fts = n_fts
-        self.num_classes = num_classes
-        self.num_classes_aux = num_classes_aux
+        self.num_classes = 3
+        self.num_classes_aux = 0
 
-        logits_fts = 0  # 36 * 2  # Mean & max pool scs/ss/nfn
-
-        self.lstms, self.mlps = {}, {}
-        if lstm_dim:
-            self.mlps = nn.ModuleDict(
-                {
-                    "nfn": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-                    "scs": nn.Sequential(nn.Linear(15, dense_dim), nn.Mish()),
-                    "ss": nn.Sequential(nn.Linear(6, dense_dim), nn.Mish()),
-                }
-            )
-            self.lstms = nn.ModuleDict(
-                {
-                    k: nn.LSTM(
-                        dense_dim, lstm_dim, batch_first=True, bidirectional=True
-                    )
-                    for k in ["nfn", "scs", "ss"]
-                }
-            )
-            logits_fts += 4 * lstm_dim * 2 * resize
-
-        self.crop_mlp = None
-        if n_fts:
-            logits_fts += dense_dim  # * 4
-            self.crop_mlp = nn.Sequential(
-                nn.Linear(n_fts, dense_dim),
-                nn.Dropout(p=p),
-                nn.Mish(),
-                # nn.Linear(dense_dim, dense_dim),
-                # nn.Dropout(p=p),
-                # nn.Mish(),
-            )
-
-        self.logits = nn.Sequential(
-            nn.Linear(logits_fts, dense_dim),
+        self.logits_scs = nn.ModuleList([
+            nn.Sequential(
+            nn.Linear(ft_dim[0], dense_dim),
             nn.Dropout(p=p),
-            nn.Mish(),
-            nn.Linear(dense_dim, num_classes),
-        )
+            nn.LeakyReLU(0.05),
+            nn.Linear(dense_dim, 3),
+        ) for _ in range(5)])
+
+        self.logits_nfn =  nn.ModuleList([
+            nn.Sequential(
+            nn.Linear(ft_dim[1], dense_dim),
+            nn.Dropout(p=p),
+            nn.LeakyReLU(0.05),
+            nn.Linear(dense_dim, 3),
+        ) for _ in range(10)])
+
+        self.logits_ss =  nn.ModuleList([
+            nn.Sequential(
+            nn.Linear(ft_dim[2], dense_dim),
+            nn.Dropout(p=p),
+            nn.LeakyReLU(0.05),
+            nn.Linear(dense_dim, 3),
+        ) for _ in range(10)])
 
     def forward(self, x, ft=None):
         """
@@ -233,28 +207,65 @@ class BaselineModel(nn.Module):
         """
         ref_k = list(x.keys())[0]
         bs = x[ref_k].size(0)
-        fts = torch.empty((bs, 0)).to(x[ref_k].device)
+        logits = torch.zeros(bs, 25, 3).to(x[ref_k].device)
 
-        # print(fts.size())
+        if "crop_2" in x.keys():
+            x["crop"] = (x["crop"] + x["crop_2"]) / 2
+            del x["crop_2"]
 
-        fts_lstm = {}
-        if len(self.mlps):
-            for k in self.mlps:
-                features = self.mlps[k](x[k])
-                features_lstm, _ = self.lstms[k](features)
-                fts_lstm[k] = features_lstm.reshape(bs, -1)
+        # if "scs_crop_coords_2" in x.keys() and "scs_crop_coords" in x.keys():
+        #     x["scs_crop_coords"] = (x["scs_crop_coords"] + x["scs_crop_coords_2"]) / 2
+        #     del x["scs_crop_coords_2"]
 
-            fts_lstm = torch.cat([fts_lstm[k] for k in fts_lstm], -1)
-            fts = torch.cat([fts, fts_lstm], 1)
+        if "dh_2" in x.keys():
+            x['dh'][:, -10:] = x['dh_2'][:, -10:]
+            del x['dh_2']
 
-        # print(fts.size())
+        if "dh_3" in x.keys():
+            x['dh'][:, :5] = (x['dh'][:, :5] + x['dh_3'][:, :5]) / 2
+            del x['dh_3']
 
-        if self.crop_mlp is not None:
-            crop_fts = torch.cat([x[k] for k in x if "crop" in k or "dd" in k], 1)
-            crop_fts = self.crop_mlp(crop_fts)
-            fts = torch.cat([fts, crop_fts], 1)
+        if "dh_4" in x.keys():
+            x['dh'][:, :5] = (2 * x['dh'][:, :5]+ x['dh_4'][:, :5]) / 3
+            del x['dh_4']
 
-        # print(fts.size())
+        fts = torch.cat(
+            [
+                x[k].view(bs, 25, -1)
+                for k in x.keys()
+                if not any([s in k for s in ["scs", "nfn", "ss", "spinenet"]])
+            ],
+            -1,
+        )
 
-        logits = self.logits(fts).view(bs, -1, 3)
+        fts_scs = torch.cat(
+            [fts[:, :5]] +
+            [x[k].view(bs, -1, 3) for k in x.keys() if "scs" in k] +
+            ([x['spinenet']] if "spinenet" in x else []),
+            -1
+        )
+
+        fts_nfn = torch.cat(
+            [fts[:, 5:15]] +
+            [x[k].view(bs, -1, 3) for k in x.keys() if "nfn" in k] +
+            ([x['spinenet'].repeat(1, 2, 1)] if "spinenet" in x else []),
+            -1
+        )
+
+        fts_ss = torch.cat(
+            [fts[:, 15:]] +
+            [x[k].view(bs, -1, 3) for k in x.keys() if "ss" in k] +
+            ([x['spinenet'].repeat(1, 2, 1)] if "spinenet" in x else []),
+            -1
+        )
+
+        for i in range(5):
+            logits[:, i] = self.logits_scs[i](fts_scs[:, i])
+        for i in range(10):
+            logits[:, 5 + i] = self.logits_nfn[i](fts_nfn[:, i])
+        for i in range(10):
+            logits[:, 15 + i] = self.logits_ss[i](fts_ss[:, i])
+
+        # logits[:, 5: 15] = self.logits_nfn(x["nfn_crop_coords"].view(bs, 10, 3))
+
         return logits, torch.zeros(bs)

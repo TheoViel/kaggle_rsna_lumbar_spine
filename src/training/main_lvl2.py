@@ -119,6 +119,24 @@ def k_fold(config, df, log_folder=None, run=None):
             )
             seed_everything(config.seed + fold)
 
+            # preds = np.load('../logs/2024-10-07/0/pred_oof.npy')
+            # t = torch.from_numpy(df[config.targets].values).contiguous().long().cuda()
+            # p = torch.from_numpy(preds).contiguous().float().softmax(-1).cuda()
+
+            # from tqdm import tqdm
+            # for _ in tqdm(range(500000)):
+            #     ids = np.random.choice(np.arange(len(df)), 400, replace=False)
+            #     avg_loss, losses = rsna_loss(t[ids], torch.ones_like(p)[ids] / 3, verbose=0)
+            
+            #     if avg_loss >= 1.02:
+            #         break
+
+            # if avg_loss < 1.02:
+            #     continue
+
+            # df_train = df[df.index.isin(ids)].reset_index(drop=True)
+            # df_val = df[df.index.isin(ids)].reset_index(drop=True)
+
             df_train = df[df["fold"] != fold].reset_index(drop=True)
             df_val = df[df["fold"] == fold].reset_index(drop=True)
 
@@ -137,7 +155,6 @@ def k_fold(config, df, log_folder=None, run=None):
             )
 
             pred_oof[df[df["fold"] == fold].index.values] = preds
-
             # if log_folder is None:
             #     return preds, preds_aux
 
