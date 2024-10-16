@@ -2,7 +2,6 @@ import cv2
 import torch
 import numpy as np
 import pandas as pd
-import torch.nn.functional as F
 
 from collections import Counter, defaultdict
 from torch.utils.data import Dataset
@@ -58,9 +57,8 @@ def get_frames(frame, n_frames, frames_c, stride=1, max_frame=100):
 
 class ImageDataset(Dataset):
     """
-    Dataset for training 2.5D crop classification models.
+    Base dataset for loading images and their corresponding targets for classification tasks.
     """
-
     def __init__(
         self,
         df,
@@ -69,20 +67,18 @@ class ImageDataset(Dataset):
         frames_chanel=0,
         n_frames=1,
         stride=1,
-        load_in_ram=True,
         train=False,
-        use_coords_target=False,
-        use_with_coords=False,
         **kwargs,
     ):
         """
-        Constructor for the CropDataset class.
+        Constructor for the ImageDataset class.
 
         Args:
-            df (pandas DataFrame): Metadata containing the information.
-            transforms (albu transforms, optional): Transforms to apply. Defaults to None.
+            df (pandas DataFrame): Metadata containing image paths and targets.
+            targets (str, optional): Column name for the target values. Defaults to "target".
+            transforms (callable, optional): Transforms to apply to the images. Defaults to None.
             frames_chanel (int, optional): Number of frames for channel stacking. Defaults to 0.
-            n_frames (int, optional): The number of frames to use. Defaults to 0.
+            n_frames (int, optional): The number of frames to use. Defaults to 1.
             stride (int, optional): The step size between frames. Defaults to 1.
             train (bool, optional): Whether the dataset is for training. Defaults to False.
         """
@@ -102,41 +98,6 @@ class ImageDataset(Dataset):
 
         self.train = train
         self.coords = None
-        self.use_coords_target = use_coords_target
-        if "coords" in df.columns:
-            try:
-                self.coords = df["coords"].apply(np.vstack).values
-            except TypeError:
-                self.coords = df["coords"].values
-            self.sides = df['side'].values
-
-        self.use_with_coords = use_with_coords
-        if "with_coords" in df.columns and use_with_coords:
-            try:
-                self.with_coords = df["with_coords"].apply(np.vstack).values
-            except TypeError:
-                self.with_coords = df["with_coords"].values
-
-        self.load_in_ram = load_in_ram
-        self.load_imgs_in_ram()
-
-    def load_imgs_in_ram(self):
-        self.imgs = {}
-        if not self.load_in_ram:
-            return
-
-        for path in np.unique(self.img_paths):
-            try:
-                img = np.load(path).astype(np.float32)
-                # img = np.clip(
-                #     img, np.percentile(img.flatten(), 0), np.percentile(img.flatten(), 98)
-                # )
-                img = (img - img.min()) / (img.max() - img.min()) * 255
-            except FileNotFoundError:
-                img = np.zeros((1, 64, 64))
-
-            img = img.astype(np.uint8)
-            self.imgs[path] = img
 
     def __len__(self):
         """
@@ -147,35 +108,21 @@ class ImageDataset(Dataset):
         """
         return len(self.df)
 
-    def get_coords_target(self, idx):
-        y = np.zeros((2, 2)) - 1
-        sides = self.sides[idx]
-
-        for i, s in enumerate(['Left', 'Right']):
-            if s not in sides:
-                continue
-            coords = self.coords[idx][sides.index(s)]
-            y[i] = coords[1:]
-        return y
-
     def __getitem__(self, idx):
         """
-        Item accessor. Samples a random frame inside the organ.
+        Item accessor. Loads an image and its corresponding target.
 
         Args:
             idx (int): Index.
 
         Returns:
-            torch.Tensor: Image as a tensor of shape [(N,) C, H, W].
-            torch.Tensor: Label as a tensor of shape [3].
-            int: Dummy value.
+            torch.Tensor: Image as a tensor.
+            torch.Tensor: Labels as a tensor.
+            torch.Tensor: Auxiliary labels as a tensor.
         """
-        try:
-            img = self.imgs[self.img_paths[idx]]
-        except KeyError:
-            img = np.load(self.img_paths[idx]).astype(np.float32)
-            img = (img - img.min()) / (img.max() - img.min()) * 255
-            img = img.astype(np.uint8)
+        img = np.load(self.img_paths[idx]).astype(np.float32)
+        img = (img - img.min()) / (img.max() - img.min()) * 255
+        img = img.astype(np.uint8)
 
         # Pick frame(s)
         try:
@@ -199,37 +146,14 @@ class ImageDataset(Dataset):
 
         # Load
         image = img[np.array(frames)].transpose(1, 2, 0)
-
         image = image.astype(np.float32) / 255.0
-
-        # image = np.clip(
-        #     image, np.percentile(image.flatten(), 0), np.percentile(image.flatten(), 98)
-        # )
-
         image = (image - image.min()) / (image.max() - image.min())
 
         # Augment
-        if self.use_coords_target:
-            # Augment
-            if self.transforms:
-                y = self.get_coords_target(idx)
-                transformed = self.transforms(image=image, keypoints=y[y.sum(-1) > 0].copy())
-                image = transformed["image"]
-
-            y = torch.tensor(y).float()
-            y[y.sum(-1) > 0] = torch.tensor(transformed["keypoints"]).float()
-            y[:, 0] /= image.size(2)
-            y[:, 1] /= image.size(1)
-            y = torch.where(y < 0, -1, y)
-            y = torch.where(y > 1, -1, y)
-
-            y_aux = y.clone()
-
-        else:
-            if self.transforms:
-                transformed = self.transforms(image=image)
-                image = transformed["image"]
-            y_aux = torch.tensor([self.targets_aux[idx]])
+        if self.transforms:
+            transformed = self.transforms(image=image)
+            image = transformed["image"]
+        y_aux = torch.tensor([self.targets_aux[idx]])
 
         tgt = self.targets[idx]
         if isinstance(self.targets[idx], (int, float, np.int64, np.int32)):
@@ -257,7 +181,6 @@ class CropDataset(ImageDataset):
     """
     Dataset for training 2.5D crop classification models.
     """
-
     def __init__(
         self,
         df,
@@ -266,23 +189,21 @@ class CropDataset(ImageDataset):
         frames_chanel=0,
         n_frames=1,
         stride=1,
-        use_coords_crop=False,
-        load_in_ram=True,
         train=False,
         flip=False,
-        use_with_coords=False,
-        use_coords_target=False,
     ):
         """
         Constructor for the CropDataset class.
 
         Args:
-            df (pandas DataFrame): Metadata containing the information.
-            transforms (albu transforms, optional): Transforms to apply. Defaults to None.
+            df (pandas DataFrame): Metadata containing image paths and targets.
+            targets (str, optional): Column name for the target values. Defaults to "target".
+            transforms (callable, optional): Transforms to apply to the images. Defaults to None.
             frames_chanel (int, optional): Number of frames for channel stacking. Defaults to 0.
-            n_frames (int, optional): The number of frames to use. Defaults to 0.
+            n_frames (int, optional): The number of frames to use. Defaults to 1.
             stride (int, optional): The step size between frames. Defaults to 1.
             train (bool, optional): Whether the dataset is for training. Defaults to False.
+            flip (bool, optional): Whether to apply flipping augmentation. Defaults to False.
         """
         super().__init__(
             df,
@@ -291,9 +212,7 @@ class CropDataset(ImageDataset):
             frames_chanel=frames_chanel,
             n_frames=n_frames,
             stride=stride,
-            load_in_ram=load_in_ram,
             train=train,
-            use_with_coords=use_with_coords,
         )
         try:
             if isinstance(self.targets[0], list):
@@ -309,56 +228,34 @@ class CropDataset(ImageDataset):
         except KeyError:
             self.sides = np.ones(len(df)) * 4  # All Center for scs
 
-        self.use_coords_crop = use_coords_crop
-        if self.use_coords_crop:
-            col = "coords_crop" if "coords_crop" in df.columns else "coords"
-            self.coords_crop = np.array(df[col].values.tolist()).astype(int)
-
         self.flip = flip
 
     def __getitem__(self, idx):
         """
-        Item accessor. Samples a random frame inside the organ.
+        Item accessor. Loads an image and applies any necessary augmentations.
 
         Args:
             idx (int): Index.
 
         Returns:
-            torch.Tensor: Image as a tensor of shape [(N,) C, H, W].
-            torch.Tensor: Label as a tensor of shape [3].
+            torch.Tensor: Image as a tensor.
+            torch.Tensor: Labels as a tensor.
             int: Dummy value.
         """
         # Load
         try:
-            img = self.imgs[self.img_paths[idx]]
-        except KeyError:
-            try:
-                img = np.load(self.img_paths[idx]).astype(np.float32)
-                max_, min_ = img.max(), img.min()
-                if max_ != min_:
-                    img = (img - min_) / (max_ - min_) * 255
-                else:
-                    img = img - min_
-            except Exception:
-                img = np.zeros((1, 64, 64))
-            img = img.astype(np.uint8)
+            img = np.load(self.img_paths[idx]).astype(np.float32)
+            max_, min_ = img.max(), img.min()
+            if max_ != min_:
+                img = (img - min_) / (max_ - min_) * 255
+            else:
+                img = img - min_
+        except Exception:
+            img = np.zeros((1, 64, 64))
+        img = img.astype(np.uint8)
 
         # Pick frame(s)
         frame = self.sides[idx] * len(img) // 8
-        # print(frame, self.coords_crop[idx][0])
-        # print(frame, "naive")
-
-        if self.use_coords_crop:
-            gt_frame = frame
-            if isinstance(self.coords_crop[idx], (int, np.int32, np.int64)):
-                if self.coords_crop[idx] > 0:
-                    gt_frame = self.coords_crop[idx]
-            else:
-                if self.coords_crop[idx].max() > 0:
-                    gt_frame = self.coords_crop[idx][0]
-
-            if np.abs(frame - gt_frame) <= 4:  # Noisy
-                frame = gt_frame
 
         if self.train:
             if self.n_frames <= 3:
@@ -395,10 +292,6 @@ class CropDataset(ImageDataset):
                 if tgt[i] > -1:
                     y[i, tgt[i]] = 1
 
-        if self.use_with_coords:
-            mask = self.with_coords[idx].flatten()[:, None].repeat(3, 1)
-            y = np.where(mask, y, 0)  # -1 where no coords
-
         # Reshape
         if self.frames_chanel:
             image = image.view(self.n_frames, 3, image.size(1), image.size(2))
@@ -415,114 +308,10 @@ class CropDataset(ImageDataset):
         return image, y, 0
 
 
-class CropSagAxDataset(CropDataset):
-    """
-    Dataset for training 2.5D crop classification models.
-    """
-    def __init__(
-        self,
-        df,
-        targets="target",
-        transforms=None,
-        frames_chanel=0,
-        n_frames=1,
-        stride=1,
-        use_coords_crop=False,
-        load_in_ram=True,
-        train=False,
-    ):
-        """
-        Constructor for the CropDataset class.
-
-        Args:
-            df (pandas DataFrame): Metadata containing the information.
-            transforms (albu transforms, optional): Transforms to apply. Defaults to None.
-            frames_chanel (int, optional): Number of frames for channel stacking. Defaults to 0.
-            n_frames (int, optional): The number of frames to use. Defaults to 0.
-            stride (int, optional): The step size between frames. Defaults to 1.
-            train (bool, optional): Whether the dataset is for training. Defaults to False.
-        """
-        super().__init__(
-            df,
-            targets=targets,
-            transforms=transforms,
-            frames_chanel=frames_chanel,
-            n_frames=n_frames,
-            stride=stride,
-            use_coords_crop=use_coords_crop,
-            load_in_ram=load_in_ram,
-            train=train,
-        )
-        self.img_paths_ax = df['img_path_ax'].values
-
-    def __getitem__(self, idx):
-        """
-        Item accessor. Samples a random frame inside the organ.
-
-        Args:
-            idx (int): Index.
-
-        Returns:
-            torch.Tensor: Image as a tensor of shape [(N,) C, H, W].
-            torch.Tensor: Label as a tensor of shape [3].
-            int: Dummy value.
-        """
-        sag_image, y, _ = super().__getitem__(idx)
-
-        level = self.img_paths_ax[idx][-9:-4]
-        level = LEVELS_.index(level)
-
-        try:
-            img = np.load(self.img_paths_ax[idx]).astype(np.float32)
-            img = (img - img.min()) / (img.max() - img.min()) * 255
-        except FileNotFoundError:
-            img = np.zeros((1, 64, 64))
-        img = img.astype(np.uint8)
-
-        w = img.shape[2]
-        if self.sides[idx] < 4:  # Right
-            img = img[:, :, :w // 2]
-        elif self.sides[idx] > 4:
-            img = img[:, :, w // 2:]
-
-        frame = len(img) // 2
-
-        if self.train:
-            frame += np.random.choice([-1, 0, 0, 1])
-            # frame += np.random.choice([-2, -1, 0, 1, 2])
-
-        frames = get_frames(
-            frame,
-            self.n_frames,
-            self.frames_chanel,
-            stride=self.stride,
-            max_frame=len(img) - 1,
-        )
-
-        image = img[np.array(frames)].transpose(1, 2, 0)
-        image = image.astype(np.float32) / 255.0
-
-        # Augment
-        if self.transforms:
-            transformed = self.transforms(image=image)
-            image = transformed["image"]
-        # Reshape
-        if self.frames_chanel:
-            image = image.view(self.n_frames, 3, image.size(1), image.size(2))
-        else:
-            image = image.unsqueeze(1).repeat(1, 3, 1, 1)
-        if self.n_frames == 1:
-            image = image[0]
-
-        # return image, y, 0
-        return {"sag": sag_image, "ax": image, "level": level}, y, 0
-
-
 class CoordsDataset(Dataset):
     """
-    Dataset for training 2.5D crop classification models.
+    Dataset for training coords models.
     """
-
     def __init__(
         self,
         df,
@@ -532,14 +321,12 @@ class CoordsDataset(Dataset):
         **kwargs,
     ):
         """
-        Constructor for the CropDataset class.
+        Constructor for the CoordsDataset class.
 
         Args:
             df (pandas DataFrame): Metadata containing the information.
-            transforms (albu transforms, optional): Transforms to apply. Defaults to None.
-            frames_chanel (int, optional): Number of frames for channel stacking. Defaults to 0.
-            n_frames (int, optional): The number of frames to use. Defaults to 0.
-            stride (int, optional): The step size between frames. Defaults to 1.
+            targets (str, optional): Column name for the target values. Defaults to "target".
+            transforms (callable, optional): Transforms to apply. Defaults to None.
             train (bool, optional): Whether the dataset is for training. Defaults to False.
         """
         self.df = df
@@ -563,14 +350,14 @@ class CoordsDataset(Dataset):
 
     def __getitem__(self, idx):
         """
-        Item accessor. Samples a random frame inside the organ.
+        Item accessor. Retrieves an image and its corresponding target coordinates.
 
         Args:
             idx (int): Index.
 
         Returns:
-            torch.Tensor: Image as a tensor of shape [(N,) C, H, W].
-            torch.Tensor: Label as a tensor of shape [3].
+            torch.Tensor: Image as a tensor.
+            torch.Tensor: Target coordinates as a tensor.
             int: Dummy value.
         """
         image = cv2.imread(self.img_paths[idx]).astype(np.float32) / 255.0
@@ -578,7 +365,6 @@ class CoordsDataset(Dataset):
         # Augment
         if self.transforms:
             y = self.targets[idx].copy()
-            # print(y)
             transformed = self.transforms(image=image, keypoints=y[y.sum(-1) > 0].copy())
             image = transformed["image"]
 
@@ -592,161 +378,11 @@ class CoordsDataset(Dataset):
         return image, y, 0
 
 
-class Seg3dDataset(Dataset):
-    """
-    Dataset for training 3D segmentation models.
-
-    Attributes:
-        df (pandas DataFrame): Metadata containing image and mask information.
-        train (bool): Flag indicating whether the dataset is used for training.
-        test (bool): Flag indicating whether the dataset is used for testing.
-    """
-
-    def __init__(
-        self,
-        df,
-        img_size=(32, 512, 512),
-        train=False,
-        test=False,
-        load_in_ram=False,
-    ):
-        """
-        Constructor.
-
-        Args:
-            df (pandas DataFrame): Metadata containing image and mask information.
-            train (bool, optional): Whether the dataset is used for training. Defaults to False.
-            test (bool, optional): Whether the dataset is used for testing. Defaults to False.
-        """
-        self.df = df
-        self.train = train
-        self.test = test
-        self.img_size = img_size
-
-        self.img_paths = df["img_path"].values
-        self.mask_paths = df["mask_path"].values if "mask_path" in df.columns else []
-        # self.class_weights = np.vstack(df['source'].map({
-        #     # "spider": [1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
-        #     "spider": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        #     "spine_seg": [1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0],  # L5_S1 not defined
-        # }).values)
-
-        self.transforms = None
-        if train:
-            import monai.transforms as transforms
-
-            # https://docs.monai.io/en/0.3.0/transforms.html
-            self.transforms = transforms.Compose(
-                [
-                    # transforms.RandAffined(
-                    #     translate_range=[s // 10 for s in self.img_size],
-                    #     # rotate_range=(-0.1, 0.1),
-                    #     padding_mode="zeros",
-                    #     keys=["image", "mask"],
-                    #     mode="nearest",
-                    #     prob=0.25,
-                    # ),
-                    transforms.RandZoomd(
-                        min_zoom=0.8,
-                        max_zoom=1.2,
-                        mode="nearest",
-                        keys=["image", "mask"],
-                        prob=0.25,
-                    ),
-                    transforms.RandAdjustContrastd(
-                        gamma=(0.5, 2), keys=["image"], prob=0.25
-                    ),
-                    transforms.RandStdShiftIntensityd(
-                        factors=0.1, keys=["image"], prob=0.25
-                    ),
-                ]
-            )
-
-        self.imgs = {}
-        self.masks = {}
-        if not test and load_in_ram:
-            for idx in range(len(self.img_paths)):
-                self.imgs[self.img_paths[idx]] = np.load(self.img_paths[idx]).astype(
-                    np.float32
-                )
-                self.masks[self.mask_paths[idx]] = np.load(self.mask_paths[idx]).astype(
-                    np.uint8
-                )
-
-    def __len__(self):
-        """
-        Get the length of the dataset.
-
-        Returns:
-            int: Length of the dataset.
-        """
-        return len(self.img_paths)
-
-    def resize(self, x, mode="nearest"):
-        if isinstance(x, np.ndarray):
-            x = torch.from_numpy(x)
-            x = F.interpolate(
-                x.unsqueeze(0),
-                self.img_size,
-                mode=mode,
-            )[0].numpy()
-        else:
-            x = F.interpolate(
-                x.unsqueeze(0),
-                self.img_size,
-                mode=mode,
-            )[0]
-        return x
-
-    def __getitem__(self, idx):
-        """
-        Item accessor.
-
-        Args:
-            idx (int): Index.
-
-        Returns:
-            torch.Tensor: Image as a tensor.
-            torch.Tensor: Mask as a tensor (if not for testing).
-            int: Dummy value.
-        """
-        image = self.imgs.get(
-            self.img_paths[idx],
-            np.load(self.img_paths[idx]).astype(np.float32),
-        )[None]
-        image = self.resize(image, "trilinear")
-
-        image = (image - image.min()) / (image.max() - image.min()) * 255
-
-        if not self.test:
-            mask = self.masks.get(
-                self.mask_paths[idx], np.load(self.mask_paths[idx]).astype(np.uint8)
-            )[None]
-            mask = self.resize(mask)
-        else:
-            mask = 0
-
-        if self.transforms is not None:
-            res = self.transforms({"image": image, "mask": mask})
-            image = res["image"].as_tensor().float() / 255.0
-            mask = res["mask"].as_tensor()
-        else:
-            image = torch.from_numpy(image).float() / 255.0
-            if not self.test:
-                mask = torch.from_numpy(mask)
-
-        w = 0
-        # if not self.test:
-        #     w = torch.from_numpy(self.class_weights[idx])
-        #     w = torch.isin(mask, torch.where(w)[0])[0]
-
-        return image, mask, w
-
-
 class FeatureDataset(Dataset):
     """
     Dataset for training level 2 models.
     """
+
     def __init__(
         self,
         df,
@@ -754,6 +390,15 @@ class FeatureDataset(Dataset):
         targets="target",
         resize=None,
     ):
+        """
+        Constructor for the FeatureDataset class.
+
+        Args:
+            df (pandas DataFrame): Metadata containing image paths and targets.
+            exp_folders (dict): Dictionary mapping experiment names to folder paths.
+            targets (str, optional): Column name for the target values. Defaults to "target".
+            resize (tuple, optional): Dimensions to resize the images to. Defaults to None.
+        """
         self.df = df
         self.targets = df[targets].values
 
@@ -794,6 +439,15 @@ class FeatureDataset(Dataset):
 
     @staticmethod
     def get_series_dict(df):
+        """
+        Constructs a dictionary mapping study IDs to their series descriptions and IDs.
+
+        Args:
+            df (pandas DataFrame): DataFrame containing series information.
+
+        Returns:
+            dict: Dictionary mapping study IDs to series information.
+        """
         series_dict = defaultdict(dict)
         df = df[['series_id', 'series_description', "study_id"]]
         for study, df_study in df.explode(['series_id', 'series_description']).groupby("study_id"):
@@ -805,18 +459,28 @@ class FeatureDataset(Dataset):
             series_dict[study]["scs"] = series.get("Sagittal T2/STIR", [])
             series_dict[study]["nfn"] = series.get("Sagittal T1", [])
             series_dict[study]["ss"] = series.get("Axial T2", [])
-
-            # if series_dict[study]["nfn"] is None:
-            #     series_dict[study]["nfn"] = series_dict[study].get("scs", [])
-            # if series_dict[study]["scs"] is None:
-            #     series_dict[study]["scs"] = series_dict[study].get("nfn", [])
         return series_dict
 
     def __len__(self):
+        """
+        Get the length of the dataset.
+
+        Returns:
+            int: Length of the dataset.
+        """
         return len(self.df)
 
     @staticmethod
     def load_fts(exp_folder):
+        """
+        Loads feature data from the specified experiment folder.
+
+        Args:
+            exp_folder (str): Path to the experiment folder.
+
+        Returns:
+            dict: Dictionary mapping index keys to feature data.
+        """
         fts = {}
         for fold in range(4):
             preds = np.load(exp_folder + f'pred_inf_{fold}.npy')
@@ -828,19 +492,16 @@ class FeatureDataset(Dataset):
             fts.update(dict(zip(index, preds)))
         return fts
 
-    @staticmethod
-    def resize_fts(fts, size):
-        if len(fts.shape) == 2:  # Add chanel
-            fts = fts[:, None]
-
-        fts = fts.transpose(1, 2, 0)  # n x 3 x t -> t x n x 3
-        fts = F.interpolate(
-            torch.from_numpy(fts).float(), size=size, mode="linear"
-        ).numpy()
-        fts = fts.transpose(2, 0, 1)
-        return fts
-
     def __getitem__(self, idx):
+        """
+        Retrieves the features and target for a specific index.
+
+        Args:
+            idx (int): Index of the sample.
+
+        Returns:
+            tuple: A tuple containing features, target, and a dummy value.
+        """
         study = self.df["study_id"][idx]
         series = self.series_dict[study]
 
@@ -875,40 +536,12 @@ class FeatureDataset(Dataset):
 
                 # Put in the right order
                 ft = ft.reshape(5, -1, ft.shape[-1]).transpose(1, 0, 2).reshape(-1, ft.shape[-1])
-                # if not ("scs" in k or "nfn" in k or "ss" in k):
-                #     ft[5:15] = np.concatenate([ft[10:15], ft[5:10]], 0)  # Right then left
-                #     ft[15:25] = np.concatenate([ft[20:25], ft[15:20]], 0)  # Right then left
 
             elif "dh" in exp or "ch" in exp:
                 ft = self.fts[exp].get(study, self.dummies[exp[:2]])
-                # ft = np.where(ft == -100, 0, ft)
-
-            elif "spinenet" in exp:
-                ft = []
-                for sk in ["nfn", "scs"]:
-                    for s in series[sk]:
-                        ft_ = []
-                        for level in LEVELS_:
-                            fts_ = self.fts[exp].loc[s][level]
-                            if isinstance(fts_, dict):
-                                fts_ = np.concatenate([
-                                    fts_['CentralCanalStenosis'],
-                                    fts_['Narrowing'],
-                                    fts_['ForaminalStenosisLeft'],
-                                    fts_['ForaminalStenosisRight']]
-                                )
-                            else:
-                                fts_ = self.dummies[exp]
-
-                            ft_.append(fts_)
-                        ft.append(np.array(ft_))
-                ft = np.mean(ft, 0)
 
             else:
                 raise NotImplementedError
-
-            # print(exp)
-            # print(type(ft))
 
             fts[exp] = torch.from_numpy(ft).float().contiguous()
 

@@ -86,13 +86,7 @@ class Config:
     targets = "target"
 
     # Data
-    # crop_folder = "../input/crops_fix/"
     crop_folder = "../input/coords_crops_0.1_2/"
-    load_in_ram = False
-    remove_noisy = False
-    fix_train_crops = True
-
-    pl_folder = None  # ""  # "../output/spider_pl/"
 
     resize = (224, 224)
     frames_chanel = 1
@@ -100,9 +94,9 @@ class Config:
     stride = 1
     aug_strength = 5
     crop = False
-    use_coords_crop = False
-    flip = True
-    use_with_coords = False
+
+    fix_train_crops = True
+    flip = False
 
     # k-fold
     k = 4
@@ -110,7 +104,7 @@ class Config:
     folds_file = "../input/train_folded_v1.csv"
     selected_folds = [0, 1, 2, 3]
 
-    # Model  # coat_lite_medium coat_lite_medium_384 coatnet_1_rw_224 coatnet_rmlp_1_rw2_224
+    # Model
     name = "coatnet_1_rw_224"
     pretrained_weights = None  # "../logs/2024-09-19/17/"
 

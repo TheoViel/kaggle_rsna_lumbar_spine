@@ -6,15 +6,11 @@ from torch.nn.parallel import DistributedDataParallel
 
 from training.train import fit
 from model_zoo.models import define_model
-from model_zoo.models_bi import define_model_bi
-from model_zoo.models_dec import define_model as define_model_dec
-from model_zoo.models_dec_cls import define_model as define_model_dec_cls
 
-from data.dataset import CropDataset, ImageDataset, CoordsDataset, CropSagAxDataset
+from data.dataset import CropDataset, ImageDataset, CoordsDataset
 from data.transforms import get_transfos
 
 from util.torch import seed_everything, count_parameters, save_model_weights
-from params import NOISY_STUDIES
 
 
 def train(config, df_train, df_val, fold, log_folder=None, run=None):
@@ -33,21 +29,17 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         tuple: A tuple containing predictions and metrics.
     """
     if "crop" in config.pipe:
-        if "bi" in config.pipe:
-            dataset_class = CropSagAxDataset
-        else:
-            dataset_class = CropDataset
+        dataset_class = CropDataset
     elif "coord" in config.pipe:
         dataset_class = CoordsDataset
     else:
         dataset_class = ImageDataset
 
-    use_coords_target = config.use_coords_tgt if hasattr(config, "use_coords_tgt") else False
     transfos = get_transfos(
         strength=config.aug_strength,
         resize=config.resize,
         crop=config.crop,
-        use_keypoints="coords" in config.pipe or use_coords_target,
+        use_keypoints="coords" in config.pipe,
     )
     train_dataset = dataset_class(
         df_train,
@@ -56,19 +48,15 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         frames_chanel=config.frames_chanel,
         n_frames=config.n_frames,
         stride=config.stride,
-        use_coords_crop=config.use_coords_crop,
         train=True,
-        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
         flip=config.flip if hasattr(config, "flip") else False,
-        use_with_coords=config.use_with_coords if hasattr(config, "use_with_coords") else False,
-        use_coords_target=use_coords_target,
     )
 
     transfos = get_transfos(
         augment=False,
         resize=config.resize,
         crop=config.crop,
-        use_keypoints="coords" in config.pipe or use_coords_target,
+        use_keypoints="coords" in config.pipe,
     )
     val_dataset = dataset_class(
         df_val,
@@ -77,29 +65,20 @@ def train(config, df_train, df_val, fold, log_folder=None, run=None):
         frames_chanel=config.frames_chanel,
         n_frames=config.n_frames,
         stride=config.stride,
-        use_coords_crop=config.use_coords_crop,
         train=False,
-        load_in_ram=config.load_in_ram if hasattr(config, "load_in_ram") else False,
-        use_coords_target=use_coords_target,
     )
 
     if config.pretrained_weights is not None:
-        if any([config.pretrained_weights.endswith(k) for k in ['.pth', '.pt', ".bin"]]):
+        if any(
+            [config.pretrained_weights.endswith(k) for k in [".pth", ".pt", ".bin"]]
+        ):
             pretrained_weights = config.pretrained_weights
         else:  # folder
             pretrained_weights = config.pretrained_weights + f"{config.name}_{fold}.pt"
     else:
         pretrained_weights = None
 
-    model_fct = define_model_bi if "bi" in config.pipe else define_model
-    if hasattr(config, "use_decoder"):
-        if config.use_decoder:
-            model_fct = define_model_dec
-    if hasattr(config, "use_decoder_cls"):
-        if config.use_decoder_cls:
-            model_fct = define_model_dec_cls
-
-    model = model_fct(
+    model = define_model(
         config.name,
         drop_rate=config.drop_rate,
         drop_path_rate=config.drop_path_rate,
@@ -178,11 +157,6 @@ def k_fold(config, df, log_folder=None, run=None):
     df = df.merge(folds, how="left")
     df["fold"] = df["fold"].fillna(-1)
 
-    # from params import DATA_PATH
-    # from data.preparation import prepare_data_scs
-    # df2 = prepare_data_scs(DATA_PATH, crop_folder=config.crop_folder)
-    # df2 = df2.merge(folds, how="left")
-
     all_metrics = []
     for fold in range(config.k):
         if fold in config.selected_folds:
@@ -195,57 +169,15 @@ def k_fold(config, df, log_folder=None, run=None):
             df_train = df[df["fold"] != fold].reset_index(drop=True)
             df_val = df[df["fold"] == fold].reset_index(drop=True)
 
-            if hasattr(config, "remove_noisy"):
-                if config.remove_noisy:
-                    df_train = df_train[~df_train['study_id'].isin(NOISY_STUDIES)]
-                    df_train = df_train.reset_index(drop=True)
-
-            if hasattr(config, "pl_folder"):
-                if config.pl_folder:
-                    file = config.pl_folder + f'preds_crop_{fold}.csv'
-                    df_pl = pd.read_csv(file)
-                    df_pl['target'] = df_pl.apply(
-                        lambda r: r[df_pl.columns[-15:]].values.reshape(-1, 3), axis=1
-                    )
-                    df_pl = df_pl[
-                        df_pl['target'].apply(lambda x: x[:, 0].min() < 0.9)
-                    ].reset_index(drop=True)
-                    df_pl['side'] = 'Center'
-                    df_pl['coords'] = -1
-                    df_pl['with_coords'] = 1
-
-                    if config.local_rank == 0:
-                        print(f'- Loading {len(df_pl)} PLs from {file}\n')
-
-                    df_train = pd.concat([df_train, df_pl], ignore_index=True)
-
             if hasattr(config, "fix_train_crops"):
                 if config.fix_train_crops:
                     import re
+
                     df_train["img_path"] = df_train["img_path"].apply(
-                        lambda x: re.sub(config.crop_folder, config.crop_folder[:-2] + "f/", x)
+                        lambda x: re.sub(
+                            config.crop_folder, config.crop_folder[:-2] + "f/", x
+                        )
                     )
-
-            # df_train = pd.concat([df_train, df2[df2["fold"] != fold]], ignore_index=True)
-            # df_train = df_val.copy()
-            # if len(df) <= 1000:
-            #     df_train, df_val = df, df
-
-            if config.pipe in ["crop_nfn", "crop_scs"]:
-                if config.use_coords_crop:
-                    if config.local_rank == 0:
-                        print('- Overriding coords with seg_sag_coords\n')
-                    df_preds_coords = pd.read_csv('../output/seg_sag_coords.csv')
-                    df_val = df_val.merge(df_preds_coords, how="left")
-                    df_val['coords'] = df_val.apply(
-                        lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]],
-                        axis=1
-                    )
-                    # df_train = df_train.merge(df_preds_coords, how="left")
-                    # df_train['coords'] = df_train.apply(
-                    #     lambda x: [{"Left": x.left, "Right": x.right, "Center": x.center}[x.side]]
-                    #     axis=1
-                    # )
 
             preds, metrics = train(
                 config,

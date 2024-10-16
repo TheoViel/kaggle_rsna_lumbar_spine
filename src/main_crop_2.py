@@ -4,7 +4,7 @@ import torch
 import warnings
 import argparse
 
-from data.preparation import prepare_data_scs
+from data.preparation import prepare_data_crop
 from util.torch import init_distributed
 from util.logger import (
     create_logger,
@@ -82,7 +82,7 @@ class Config:
     seed = 42
     verbose = 1
 
-    pipe = "crop_scs"
+    pipe = "crop"
     targets = "target"
 
     # Data
@@ -90,67 +90,70 @@ class Config:
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5  # 5
+    n_frames = 13
     stride = 1
-    aug_strength = 3
+    aug_strength = 5
     crop = False
 
+    fix_train_crops = False
     flip = True
-    fix_train_crops = True
 
     # k-fold
     k = 4
-    folds_file = "../input/train_folded_v1.csv"  # f"../input/folds_{k}.csv"
+    # folds_file = f"../input/folds_{k}.csv"
+    folds_file = "../input/train_folded_v1.csv"
     selected_folds = [0, 1, 2, 3]
 
     # Model
-    name = "coatnet_1_rw_224"  # coatnet_2_rw_224
-    pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
+    name = "coatnet_1_rw_224"
+    pretrained_weights = None  # "../logs/2024-09-19/17/"
 
-    num_classes = 3
+    num_classes = 15
     num_classes_aux = 0
     drop_rate = 0.
     drop_path_rate = 0.
     n_channels = 3
     reduce_stride = False
     pooling = "avg"
-    head_3d = "lstm" if n_frames > 1 else ""
+    head_3d = "lstm_side" if n_frames > 1 else ""
+    delta = 2
 
     # Training
     loss_config = {
-        "name": "ce",
+        "name": "series",
         "weighted": False,
         "use_any": False,
         "smoothing": 0.0,
-        "activation": "softmax",
+        "activation": "series",
         "aux_loss_weight": 0.0,
         "name_aux": "patient",
         "smoothing_aux": 0.0,
         "activation_aux": "",
+        "ousm_k": 0,
     }
 
     data_config = {
         "batch_size": 16,  # 8
         "val_bs": 32,
         "mix": "mixup",
-        "mix_proba": 0.,  # 1.0
+        "mix_proba": 1.0,  # 1.0
         "sched": False,
         "mix_alpha": 0.4,
         "additive_mix": False,
-        "num_classes": num_classes,
+        "num_classes": 3,
         "num_workers": 8,
     }
 
     optimizer_config = {
         "name": "Ranger",
-        "lr": 5e-4,
+        "lr": 1e-3,
         "warmup_prop": 0.0,
         "betas": (0.9, 0.999),
         "max_grad_norm": 1.0,
         "weight_decay": 0.0,
     }
 
-    epochs = 5
+    epochs = 10
 
     use_fp16 = True
     verbose = 1
@@ -230,7 +233,7 @@ if __name__ == "__main__":
         )
         print("\n -> Training\n")
 
-    df = prepare_data_scs(DATA_PATH, crop_folder=config.crop_folder)
+    df = prepare_data_crop(DATA_PATH, crop_folder=config.crop_folder)
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)
@@ -238,6 +241,8 @@ if __name__ == "__main__":
     if len(config.selected_folds) == 4:
         if config.local_rank == 0:
             print("\n -> Inference\n")
+
+        # log_folder = "../logs/2024-10-04/9/"
 
         from inference.lvl1 import kfold_inference_crop
         kfold_inference_crop(

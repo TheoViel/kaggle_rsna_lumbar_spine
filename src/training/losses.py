@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import model_zoo.dsnt as dsnt
-
 
 class SmoothCrossEntropyLoss(nn.Module):
     """
@@ -19,7 +17,7 @@ class SmoothCrossEntropyLoss(nn.Module):
         super(SmoothCrossEntropyLoss, self).__init__()
         self.eps = eps
 
-    def forward(self, inputs, targets, w=None):
+    def forward(self, inputs, targets):
         """
         Computes the loss.
         Args:
@@ -50,34 +48,27 @@ class SmoothCrossEntropyLoss(nn.Module):
 class SigmoidMSELoss(nn.Module):
     """
     Sigmoid on preds + MSE
+
+    This class computes the Mean Squared Error (MSE) loss after applying the sigmoid function
+    to the predictions. It also handles masking of certain targets.
     """
+
     def forward(self, inputs, targets):
+        """
+        Computes the loss.
+
+        Args:
+            inputs (torch tensor [bs x n]): Predictions.
+            targets (torch tensor [bs x n]): Targets.
+
+        Returns:
+            torch tensor [bs]: Loss values.
+        """
         inputs = inputs.view(targets.size()).sigmoid()
         mask = (targets == -1)
         loss = ((inputs * 100 - targets * 100) ** 2)
-        # loss = torch.abs(inputs * 100 - targets * 100)
         loss = loss.masked_fill(mask, 0)
         return loss.mean(-1)
-
-
-class DSNTLoss(nn.Module):
-    """
-    Sigmoid on preds + MSE
-    """
-    def forward(self, inputs, targets):
-        mask = (targets == -1).amax(-1)
-        targets = targets * 2 - 1  # [0, 1] -> [-1, 1]
-
-        heatmaps = dsnt.flat_softmax(inputs)
-        coords = dsnt.dsnt(heatmaps)
-
-        euc_losses = dsnt.euclidean_losses(coords, targets)
-        reg_losses = dsnt.js_reg_losses(heatmaps, targets, sigma_t=1.0)
-
-        loss = euc_losses + reg_losses
-        loss = loss.masked_fill(mask, 0)
-
-        return loss.mean(-1).mean(-1)
 
 
 class SeriesLoss(nn.Module):
@@ -98,6 +89,16 @@ class SeriesLoss(nn.Module):
         self.weighted = weighted
 
     def forward(self, inputs, targets):
+        """
+        Computes the loss.
+
+        Args:
+            inputs (torch tensor [bs x n x 3]): Predictions.
+            targets (torch tensor [bs x n x 3]): Targets.
+
+        Returns:
+            torch tensor [bs]: Loss values.
+        """
         assert len(targets.size()) == 3
 
         targets = targets.view(-1, 3)  # bs * n_classes x 3
@@ -116,27 +117,9 @@ class SeriesLoss(nn.Module):
         return loss
 
 
-class LogLoss(nn.Module):
-    """
-    Cross-entropy loss without softmax
-    """
-    def forward(self, inputs, targets):
-        if len(targets.size()) == 1:  # to one hot
-            targets = torch.zeros_like(inputs).scatter(1, targets.view(-1, 1).long(), 1)
-        loss = -targets * torch.log(inputs)
-        return loss.sum(-1)
-
-
 class StudyLoss(nn.Module):
     """
-    Custom loss function for patient predictions.
-
-    Attributes:
-        eps (float): Smoothing factor for cross-entropy loss.
-        weighted (bool): Flag to apply class-weighted loss.
-        use_any (bool): Flag to include 'any' label in the loss calculation.
-        bce (nn.BCEWithLogitsLoss): BCE loss for bowel & extravasation.
-        ce (SmoothCrossEntropyLoss): CE loss for spleen, liver & kidney.
+    Custom loss function for study level predictions.
     """
     def __init__(self, eps=0.0, weighted=True, use_any=True):
         """
@@ -150,20 +133,19 @@ class StudyLoss(nn.Module):
         super().__init__()
         self.eps = eps
         self.ce = SmoothCrossEntropyLoss(eps=eps)
-        # self.ce  = LogLoss()
         self.weighted = weighted
         self.use_any = use_any
 
     def forward(self, inputs, targets):
         """
-        Forward pass for the PatientLoss class.
+        Computes the loss.
 
         Args:
-            inputs (torch.Tensor): Model predictions of shape (batch_size, num_classes).
-            targets (torch.Tensor): Ground truth labels of shape (batch_size, num_classes).
+            inputs (torch tensor [bs x 25 x 3]): Predictions.
+            targets (torch tensor [bs x 25]): Targets.
 
         Returns:
-            torch.Tensor: Loss value.
+            torch tensor [bs]: Loss values.
         """
         assert (targets.size(1) == 25) and (len(targets.size()) == 2), "Wrong target size"
         assert (inputs.size(1) == 25) and (len(inputs.size()) == 3), "Wrong input size"
@@ -245,8 +227,6 @@ class SpineLoss(nn.Module):
             )
         elif config["name"] == "sigmoid_mse":
             self.loss = SigmoidMSELoss()
-        elif config["name"] == "dsnt":
-            self.loss = DSNTLoss()
         else:
             raise NotImplementedError
 
@@ -260,8 +240,6 @@ class SpineLoss(nn.Module):
                 weighted=config.get("weighted", False),
                 use_any=config.get("use_any", False),
             )
-        elif config["name_aux"] == "dsnt":
-            self.loss_aux = DSNTLoss()
         else:
             pass
 
@@ -326,115 +304,3 @@ class SpineLoss(nn.Module):
             return (1 - self.aux_loss_weight) * loss.mean() + self.aux_loss_weight * loss_aux.mean()
 
         return loss.mean()
-
-
-class SegLoss(nn.Module):
-    """
-    Custom loss function for segmentation tasks.
-
-    Attributes:
-        config (dict): Configuration parameters for the loss.
-        device (str): Device to perform loss computations (e.g., "cuda" or "cpu").
-        aux_loss_weight (float): Weight for the auxiliary loss.
-        eps (float): Smoothing factor for the primary loss.
-        loss (torch.nn.Module): Loss function for primary predictions.
-        loss_aux (torch.nn.Module): Loss function for auxiliary predictions.
-    """
-    def __init__(self, config, device="cuda"):
-        """
-        Constructor for the SegLoss class.
-
-        Args:
-            config (dict): Configuration parameters for the loss.
-            device (str, optional): Device to perform loss computations. Defaults to "cuda".
-        """
-        super().__init__()
-        self.config = config
-        self.device = device
-
-        self.aux_loss_weight = config["aux_loss_weight"]
-        self.eps = config.get("smoothing", 0)
-
-        if config["name"] == "bce":
-            self.loss = nn.BCEWithLogitsLoss(reduction="none")
-        elif config["name"] == "ce":
-            self.loss = nn.CrossEntropyLoss(
-                reduction="none"
-            )
-        else:
-            raise NotImplementedError
-
-        if config["name_aux"] == "bce":
-            self.loss_aux = nn.BCEWithLogitsLoss(reduction="none")
-        elif config["name_aux"] == "ce":
-            self.loss_aux = nn.CrossEntropyLoss(
-                reduction="none"
-            )
-        else:
-            raise NotImplementedError
-
-    def prepare(self, pred, pred_aux, y, y_aux):
-        """
-        Prepares the predictions and targets for loss computation.
-
-        Args:
-            pred (torch.Tensor): Main predictions.
-            pred_aux (list): Auxiliary predictions.
-            y (torch.Tensor): Main targets.
-            y_aux (list): Auxiliary targets.
-
-        Returns:
-            Tuple(torch.Tensor, torch.Tensor): Prepared predictions and targets.
-        """
-        if self.config["name"] == "ce":
-            y = y.squeeze(1).long()
-        else:  # bce, lovasz, focal
-            y = (
-                F.one_hot(
-                    y.squeeze(1).long(), num_classes=self.config["num_classes"] + 1
-                )
-                .permute(0, 3, 1, 2)[:, 1:]
-                .float()
-            )
-            pred = pred.float().view(y.size())
-
-        if self.config["name_aux"] == "ce":
-            pred_aux = pred_aux.float()
-            y_aux = y_aux.squeeze(1).long()
-        else:
-            y_aux = y_aux.float()
-            pred_aux = pred_aux.float()
-
-        if self.eps and self.config["name"] == "bce":
-            y = torch.clamp(y, self.eps, 1 - self.eps)
-
-        return pred, pred_aux, y, y_aux
-
-    def forward(self, pred, pred_aux, y, y_aux, w=None):
-        """
-        Computes the loss.
-
-        Args:
-            pred (torch.Tensor): Main predictions.
-            pred_aux (list): Auxiliary predictions.
-            y (torch.Tensor): Main targets.
-            y_aux (list): Auxiliary targets.
-
-        Returns:
-            torch.Tensor: Loss value.
-        """
-        pred, pred_aux, y, y_aux = self.prepare(pred, pred_aux, y, y_aux)
-
-        loss = self.loss(pred, y)
-
-        if w is not None:
-            loss *= w
-            loss = loss.sum() / w.sum()
-        else:
-            loss = loss.mean()
-
-        if not self.aux_loss_weight > 0:
-            return loss
-
-        loss_aux = self.loss_aux(pred_aux, y_aux).mean()
-        return (1 - self.aux_loss_weight) * loss + self.aux_loss_weight * loss_aux

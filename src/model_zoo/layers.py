@@ -11,7 +11,7 @@ def gem(x, p=3, eps=1e-6):
     Args:
         x (torch.Tensor): Input tensor of shape (batch_size, channels, height, width).
         p (float): The p-value for the generalized mean. Default is 3.
-        eps (float): A small constant added to the denominator to prevent division by zero. Default is 1e-6.
+        eps (float): A small constant to prevent division by zero. Default is 1e-6.
 
     Returns:
         torch.Tensor: GeM-pooled representation of the input tensor.

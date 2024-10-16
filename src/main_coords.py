@@ -14,8 +14,6 @@ from util.logger import (
     get_last_log_folder,
 )
 
-# from params import DATA_PATH
-
 
 def parse_args():
     """
@@ -94,17 +92,15 @@ class Config:
     aug_strength = 6
     crop = False
 
-    use_coords_crop = False
-    load_in_ram = False
     use_mask = False
     use_ext = True
 
     # k-fold
     k = 4
     folds_file = "../input/train_folded_v1.csv"
-    selected_folds = [3]  # 0, 1, 2, 3]
+    selected_folds = [0, 1, 2, 3]
 
-    # Model  # coatnet_1_rw_224 coat_lite_medium_384 coat_lite_medium maxvit_tiny_tf_384
+    # Model
     name = "coatnet_rmlp_2_rw_384"
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
@@ -234,26 +230,6 @@ if __name__ == "__main__":
 
     from training.main import k_fold
     k_fold(config, df, log_folder=log_folder, run=run)
-
-    # if len(config.selected_folds) == 4:
-    #     if config.local_rank == 0:
-    #         print("\n -> Inference\n")
-
-    #     from inference.lvl1 import kfold_inference
-
-    #     df = prepare_coords_data(config.coords_folder)
-
-    #     # log_folder = "../logs/2024-08-06/17/"
-
-    #     kfold_inference(
-    #         df,
-    #         log_folder,
-    #         use_fp16=config.use_fp16,
-    #         save=True,
-    #         distributed=True,
-    #         config=config,
-    #         use_aux=True,
-    #     )
 
     if config.local_rank == 0:
         print("\nDone !")

@@ -6,8 +6,6 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 from transformers import get_linear_schedule_with_warmup
 
-import model_zoo.dsnt as dsnt
-
 from data.loader import define_loaders
 from training.losses import SpineLoss
 from training.mix import Mixup, Cutmix
@@ -41,7 +39,6 @@ def evaluate(
 
     Returns:
         preds (torch.Tensor): Predictions.
-        preds_aux (torch.Tensor): Auxiliary Predictions.
         val_loss (float): Validation loss.
     """
     model.eval()
@@ -68,9 +65,6 @@ def evaluate(
                 y_pred = y_pred.view(y_pred.size(0), -1, 3).softmax(-1)
             elif loss_config["activation"] == "study":
                 y_pred = y_pred.view(y_pred.size(0), -1, 3)  # .softmax(-1)
-            elif loss_config["activation"] == "dsnt":
-                y_pred = dsnt.flat_softmax(y_pred)
-                y_pred = (dsnt.dsnt(y_pred) + 1) / 2  # coords in [0, 1]
             else:
                 pass
                 # raise NotImplementedError
@@ -252,7 +246,7 @@ def fit(
 
                     preds = preds[: len(val_dataset)]
 
-                    if loss_config['name'] in ['sigmoid_mse', "dsnt"]:
+                    if loss_config['name'] == 'sigmoid_mse':
                         y = val_dataset.targets_rel.flatten()
                         dist = np.abs(y - preds.flatten())
                         dist = (dist[y > 0] * 100).mean()

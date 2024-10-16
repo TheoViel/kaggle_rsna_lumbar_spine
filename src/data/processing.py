@@ -1,4 +1,3 @@
-# import os
 import cv2
 import glob
 import pydicom
@@ -8,18 +7,30 @@ from collections import Counter
 
 
 class dotdict(dict):
+    """
+    A dictionary that allows accessing its elements as attributes.
+    """
+
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
     def __getattr__(self, name):
+        """
+        Get an attribute from the dictionary.
+
+        Args:
+            name (str): The name of the attribute to get.
+
+        Returns:
+            The value of the attribute.
+
+        Raises:
+            AttributeError: If the attribute does not exist.
+        """
         try:
             return self[name]
         except KeyError:
             raise AttributeError(name)
-
-
-def np_dot(a, b):
-    return np.sum(a * b, 1)
 
 
 def read_series_metadata(
@@ -27,9 +38,21 @@ def read_series_metadata(
     series_id,
     series_description,
     data_path="../input/train_images/",
-    advanced_sorting=True,
     return_imgs=True,
 ):
+    """
+    Reads the metadata and images from a DICOM series.
+
+    Args:
+        study_id (int): The ID of the study.
+        series_id (int): The ID of the series.
+        series_description (str): The description of the series.
+        data_path (str, optional): The path to the input data. Defaults to "../input/train_images/".
+        return_imgs (bool, optional): Whether to return the images. Defaults to True.
+
+    Returns:
+        tuple: A tuple containing the DataFrame with metadata and the list of images.
+    """
     dicom_dir = data_path + f"{study_id}/{series_id}"
 
     # read dicom file
@@ -42,14 +65,6 @@ def read_series_metadata(
     dicom_df, images = [], {}
     for i, d in zip(instance_number, dicom):  # d__.dict__
         images[i] = d.pixel_array if return_imgs else None
-        try:
-            g = (
-                str([round(float(v), 3) for v in d.ImageOrientationPatient])
-                if advanced_sorting
-                else 0
-            )
-        except Exception:
-            g = 0
 
         try:
             dicom_df.append(
@@ -65,11 +80,10 @@ def read_series_metadata(
                     PixelSpacing=[float(v) for v in d.PixelSpacing],
                     SpacingBetweenSlices=float(d.SpacingBetweenSlices),
                     SliceThickness=float(d.SliceThickness),
-                    grouping=g,
+                    grouping=0,
                 )
             )
-        except Exception:  # Missing fields, fall back to sorting by IPP
-            advanced_sorting = False
+        except Exception:  # Missing fields
             dicom_df.append(
                 dotdict(
                     study_id=study_id,
@@ -81,57 +95,19 @@ def read_series_metadata(
                     PixelSpacing=-1,
                     SpacingBetweenSlices=-1,
                     SliceThickness=-1,
-                    grouping=g
+                    grouping=0,
                 )
             )
 
     dicom_df = pd.DataFrame(dicom_df)
 
     # Sort slices
-    if advanced_sorting:
-        try:
-            # Sort inside each cluster by projection
-            data = []
-            sort_data_by_group = []
-            for _, df in dicom_df.groupby("grouping"):
-                position = np.array(df["ImagePositionPatient"].values.tolist())
-                orientation = np.array(df["ImageOrientationPatient"].values.tolist())
-                normal = np.cross(orientation[:, :3], orientation[:, 3:])
-                projection = np_dot(normal, position)
-
-                df.loc[:, "projection"] = projection
-                df = df.sort_values("projection")
-                data.append(dotdict(df=df))
-
-                if "sagittal" in series_description.lower():
-                    sort_data_by_group.append(position[0, 0])  # x
-                if "axial" in series_description.lower():
-                    sort_data_by_group.append(position[0, 2])  # z
-
-            # Sort clusters by position
-            data = [r for _, r in sorted(zip(sort_data_by_group, data))]
-            for i, r in enumerate(data):
-                r.df.loc[:, "group"] = i
-
-            df = pd.concat([r.df for r in data])
-        except Exception:
-            if "sagittal" in series_description.lower():
-                dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(
-                    lambda x: x[0]
-                )
-            if "axial" in series_description.lower():
-                dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(
-                    lambda x: x[2]
-                )
-            df = dicom_df.sort_values("order", ignore_index=True)
-            df["group"] = 0
-    else:  # Sort by z
-        if "sagittal" in series_description.lower():
-            dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(lambda x: x[0])
-        if "axial" in series_description.lower():
-            dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(lambda x: x[2])
-        df = dicom_df.sort_values("order", ignore_index=True)
-        df["group"] = 0
+    if "sagittal" in series_description.lower():
+        dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(lambda x: x[0])
+    if "axial" in series_description.lower():
+        dicom_df["order"] = dicom_df["ImagePositionPatient"].apply(lambda x: x[2])
+    df = dicom_df.sort_values("order", ignore_index=True)
+    df["group"] = 0
 
     df.loc[:, "z"] = np.arange(len(df))
 
@@ -140,12 +116,24 @@ def read_series_metadata(
 
 
 def process_2(study, series, orient, data_path="", on_gpu=False):
+    """
+    Processes the DICOM series and returns the images and metadata.
+
+    Args:
+        study (int): The ID of the study.
+        series (int): The ID of the series.
+        orient (str): The orientation of the series.
+        data_path (str, optional): The path to the input data directory. Defaults to "".
+        on_gpu (bool, optional): Whether to process on GPU. Defaults to False.
+
+    Returns:
+        tuple: A tuple containing the processed images and the DataFrame with metadata.
+    """
     df, imgs = read_series_metadata(
         study,
         series,
         orient,
         data_path=data_path,
-        advanced_sorting=False,  # (orient == "axial")
     )
 
     try:
@@ -169,6 +157,21 @@ def process_and_save(
     save_meta=False,
     save_middle_frame=False,
 ):
+    """
+    Processes the DICOM series and saves the images and metadata.
+
+    Args:
+        study (int): The ID of the study.
+        series (int): The ID of the series.
+        orient (str): The orientation of the series.
+        data_path (str): The path to the input data directory.
+        save_folder (str, optional): Path to the saving folder. Defaults to "".
+        save_meta (bool, optional): Whether to save the metadata. Defaults to False.
+        save_middle_frame (bool, optional): Whether to save the middle frame. Defaults to False.
+
+    Returns:
+        dict: A dictionary containing the study ID, series ID, and the list of frame numbers.
+    """
     imgs, df_series = process_2(int(study), int(series), orient, data_path=data_path)
     if save_folder:
         np.save(save_folder + f"npy/{study}_{series}.npy", imgs)

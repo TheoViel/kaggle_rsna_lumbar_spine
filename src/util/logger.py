@@ -153,6 +153,8 @@ def init_neptune(config, log_folder):
         Neptune run: Run.
     """
     print()
+    if NEPTUNE_PROJECT is None:
+        print('Create your Neptune project and replace the value in params.py')
     run = neptune.init_run(
         project=NEPTUNE_PROJECT, git_ref=neptune.types.GitRef.DISABLED
     )

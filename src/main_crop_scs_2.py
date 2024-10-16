@@ -87,10 +87,12 @@ class Config:
 
     # Data
     crop_folder = "../input/coords_crops_0.1_2/"
+    # crop_folder = "../input/coords_crops_0.1_spinenet/"
+    # crop_folder = "../input/coords_crops_0.1_2/"
 
     resize = (224, 224)
     frames_chanel = 1
-    n_frames = 5  # 5
+    n_frames = 3  # 5
     stride = 1
     aug_strength = 3
     crop = False
@@ -104,7 +106,7 @@ class Config:
     selected_folds = [0, 1, 2, 3]
 
     # Model
-    name = "coatnet_1_rw_224"  # coatnet_2_rw_224
+    name = "coatnet_2_rw_224"  # coatnet_2_rw_224
     pretrained_weights = None  # PRETRAINED_WEIGHTS[name]  # None
 
     num_classes = 3

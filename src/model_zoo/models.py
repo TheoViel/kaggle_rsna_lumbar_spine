@@ -3,9 +3,7 @@ import torch
 import warnings
 import torch.nn as nn
 
-from model_zoo.spinenet import GradingModel
 from model_zoo.layers import GeM, Attention
-# from util.torch import load_model_weights
 
 warnings.simplefilter(action="ignore", category=UserWarning)
 
@@ -28,34 +26,29 @@ def define_model(
     verbose=1,
 ):
     """
-    Loads a pretrained model & builds the architecture.
-    Supports timm models.
+    Define a classification model with a specified encoder.
 
     Args:
-        name (str): Name of the model architecture.
-        num_classes (int, optional): Number of main output classes. Defaults to 2.
-        num_classes_aux (int, optional): Number of auxiliary output classes. Defaults to 0.
-        n_channels (int, optional): Number of input channels. Defaults to 3.
-        pretrained_weights (str, optional): Path to pre-trained weights. Defaults to "".
-        pretrained (bool, optional): Whether to use pre-trained weights. Defaults to True.
-        reduce_stride (bool, optional): Whether to reduce the model's stride. Defaults to False.
-        increase_stride (bool, optional): Whether to increase the model's stride. Defaults to False.
+        name (str): The name of the encoder model.
+        num_classes (int, optional): The number of primary target classes. Defaults to 2.
+        num_classes_aux (int, optional): The number of auxiliary target classes. Defaults to 0.
+        n_channels (int, optional): The number of input channels. Defaults to 3.
+        pretrained_weights (str, optional): Path to pretrained encoder weights. Defaults to "".
+        pretrained (bool, optional): Whether to use pretrained encoder weights. Defaults to True.
+        reduce_stride (bool, optional): Whether to reduce the encoder stride. Defaults to False.
+        increase_stride (bool, optional): Whether to increase the encoder stride. Defaults to False.
         drop_rate (float, optional): Dropout rate. Defaults to 0.
         drop_path_rate (float, optional): Drop path rate. Defaults to 0.
-        head_3d (str, optional): 3D head type. Defaults to "".
+        pooling (str, optional): Pooling method. Defaults to "avg".
+        head_3d (str, optional): 3D head method. Defaults to "".
+        delta (int, optional): Delta value. Defaults to 2.
         n_frames (int, optional): Number of frames. Defaults to 1.
         verbose (int, optional): Verbosity level. Defaults to 1.
 
     Returns:
-        ClsModel: The defined model.
+        nn.Module: The defined classification model.
     """
-    if name == "spinenet":
-        encoder = GradingModel()
-        if pretrained:
-            encoder.load_weights("../output/grading", verbose=verbose)
-        head_3d = ""
-
-    elif drop_path_rate > 0 and "coat_" not in name:
+    if drop_path_rate > 0 and "coat_" not in name:
         encoder = timm.create_model(
             name,
             pretrained=pretrained,
@@ -132,16 +125,7 @@ def define_model(
 
 class ClsModel(nn.Module):
     """
-    PyTorch model for image classification.
-
-    Attributes:
-        encoder: The feature encoder.
-        num_classes (int): The number of primary classes.
-        num_classes_aux (int): The number of auxiliary classes.
-        n_channels (int): The number of input channels.
-        drop_rate (float): Dropout rate.
-        head_3d (str): The 3D head type.
-        n_frames (int): The number of frames.
+    A classification model with an encoder, pooling, and optional 3D head.
     """
     def __init__(
         self,
@@ -157,6 +141,17 @@ class ClsModel(nn.Module):
     ):
         """
         Constructor for the classification model.
+
+        Args:
+            encoder (nn.Module): The encoder model.
+            num_classes (int, optional): The number of primary target classes. Defaults to 2.
+            num_classes_aux (int, optional): The number of auxiliary target classes. Defaults to 0.
+            n_channels (int, optional): The number of input channels. Defaults to 3.
+            drop_rate (float, optional): Dropout rate. Defaults to 0.
+            pooling (str, optional): Pooling method. Defaults to "avg".
+            head_3d (str, optional): 3D head method. Defaults to "".
+            n_frames (int, optional): Number of frames. Defaults to 1.
+            delta (int, optional): Delta value. Defaults to 2.
         """
         super().__init__()
 
@@ -240,11 +235,6 @@ class ClsModel(nn.Module):
         """
         Update the number of input channels for the encoder.
         """
-        if self.encoder.name == "spinenet":
-            if self.n_channels != 1:
-                self.encoder._update_num_channels(self.n_channels)
-            return
-
         if self.n_channels != 3:
             if "convnext" in self.encoder.name:
                 conv = self.encoder.stem[0]
@@ -365,6 +355,15 @@ class ClsModel(nn.Module):
         return logits, logits_aux
 
     def forward_side(self, x):
+        """
+        Forward function for the lstm_side 3D head.
+
+        Args:
+            x (torch.Tensor [batch_size x n_frames x num_features]): Input features for the 3D head.
+
+        Returns:
+            torch.Tensor: Result of the 3D head.
+        """
         mid = x.size(1) // 2
         try:
             delta = self.delta

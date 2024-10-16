@@ -81,6 +81,7 @@ def get_transfos(
         mean (np array, optional): Mean for normalization. Defaults to 0.
         std (np array, optional): Standard deviation for normalization. Defaults to 1.
         strength (int, optional): Augmentation strength level. Defaults to 1.
+        use_keypoints (bool, optional): Whether to augment keypoints. Default to False.
 
     Returns:
         albumentation transforms: Transforms.

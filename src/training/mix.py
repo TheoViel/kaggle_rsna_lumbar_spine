@@ -4,14 +4,18 @@ import torch.nn as nn
 
 
 class Mixup(nn.Module):
+    """
+    MixUp module.
+    """
     def __init__(self, alpha, additive=False, num_classes=1, num_classes_aux=0):
         """
-        Mixup augmentation module.
+        Constructor.
 
         Args:
             alpha (float): Mixup interpolation parameter.
             additive (bool, optional): Whether to use additive mixup. Defaults to False.
             num_classes (int, optional): Number of classes. Defaults to 1.
+            num_classes_aux (int, optional): Number of aux classes. Defaults to 0.
         """
         super(Mixup, self).__init__()
         self.beta_distribution = torch.distributions.Beta(alpha, alpha)
@@ -112,14 +116,18 @@ class Mixup(nn.Module):
 
 
 class Cutmix(nn.Module):
+    """
+    CutMix module.
+    """
     def __init__(self, alpha, additive=False, num_classes=1, num_classes_aux=0):
         """
-        Cutmix augmentation module.
+        Constructor.
 
         Args:
             alpha (float): Cutmix interpolation parameter.
             additive (bool, optional): Whether to use additive cutmix. Defaults to False.
             num_classes (int, optional): Number of classes. Defaults to 1.
+            num_classes_aux (int, optional): Number of aux classes. Defaults to 0.
         """
         super(Cutmix, self).__init__()
         self.beta_distribution = torch.distributions.Beta(alpha, alpha)
@@ -204,6 +212,8 @@ class Cutmix(nn.Module):
             x (torch.Tensor): Input data.
             y (torch.Tensor): Target mask for the main task.
             y_aux (torch.Tensor, optional): Target labels for the auxiliary task. Defaults to None.
+            w (torch.Tensor, optional): Sample weights. Defaults to None.
+            use_3d (bool, optional): Whether to use 3D or temporal mixing. Defaults to False.
 
         Returns:
             torch.Tensor: Augmented input data.

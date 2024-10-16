@@ -3,6 +3,15 @@ import pandas as pd
 
 
 def sub_to_dict(file):
+    """
+    Converts a submission file to a dict with predictions.
+
+    Args:
+        truths (str): Path to submission file.
+
+    Returns:
+        dict: Dictionary containing {study: predictions} pairs.
+    """
     sub = pd.read_csv(file)
     sub['study'] = sub['row_id'].apply(lambda x: x.split('_')[0])
     sub['tgt'] = sub['row_id'].apply(lambda x: x.split('_', 1)[-1])

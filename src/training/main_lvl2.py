@@ -9,12 +9,9 @@ from model_zoo.models_lvl2 import define_model
 from data.dataset import FeatureDataset
 from util.metrics import rsna_loss
 from util.torch import seed_everything, count_parameters, save_model_weights
-from params import NOISY_STUDIES
 
 
-def train(
-    config, df_train, df_val, fold, log_folder=None, run=None
-):
+def train(config, df_train, df_val, fold, log_folder=None, run=None):
     """
     Train a level 2 model.
 
@@ -33,14 +30,12 @@ def train(
         df_train,
         config.exp_folders,
         targets=config.targets,
-        resize=config.resize,
     )
 
     val_dataset = FeatureDataset(
         df_val,
         config.exp_folders,
         targets=config.targets,
-        resize=config.resize,
     )
 
     model = define_model(
@@ -48,7 +43,6 @@ def train(
         ft_dim=config.ft_dim,
         layer_dim=config.layer_dim,
         dense_dim=config.dense_dim,
-        resize=config.resize,
         p=config.p,
         num_classes=config.num_classes,
         num_classes_aux=config.num_classes_aux,
@@ -102,8 +96,7 @@ def k_fold(config, df, log_folder=None, run=None):
 
     Args:
         config (dict): Configuration parameters for training.
-        df (pandas DataFrame): Main dataset metadata.
-        df_img (pandas DataFrame): Metadata containing image information.
+        df (pandas DataFrame): Metadata.
         log_folder (str, optional): Folder for saving logs. Defaults to None.
         run: Neptune run. Defaults to None.
     """
@@ -114,36 +107,11 @@ def k_fold(config, df, log_folder=None, run=None):
     pred_oof = np.zeros((len(df), 25, 3))
     for fold in range(config.k):
         if fold in config.selected_folds:
-            print(
-                f"\n-------------   Fold {fold + 1} / {config.k}  -------------\n"
-            )
+            print(f"\n-------------   Fold {fold + 1} / {config.k}  -------------\n")
             seed_everything(config.seed + fold)
-
-            # preds = np.load('../logs/2024-10-07/0/pred_oof.npy')
-            # t = torch.from_numpy(df[config.targets].values).contiguous().long().cuda()
-            # p = torch.from_numpy(preds).contiguous().float().softmax(-1).cuda()
-
-            # from tqdm import tqdm
-            # for _ in tqdm(range(500000)):
-            #     ids = np.random.choice(np.arange(len(df)), 400, replace=False)
-            #     avg_loss, losses = rsna_loss(t[ids], torch.ones_like(p)[ids] / 3, verbose=0)
-            
-            #     if avg_loss >= 1.02:
-            #         break
-
-            # if avg_loss < 1.02:
-            #     continue
-
-            # df_train = df[df.index.isin(ids)].reset_index(drop=True)
-            # df_val = df[df.index.isin(ids)].reset_index(drop=True)
 
             df_train = df[df["fold"] != fold].reset_index(drop=True)
             df_val = df[df["fold"] == fold].reset_index(drop=True)
-
-            if hasattr(config, "remove_noisy"):
-                if config.remove_noisy:
-                    df_train = df_train[~df_train['study_id'].isin(NOISY_STUDIES)]
-                    df_train = df_train.reset_index(drop=True)
 
             preds, metrics = train(
                 config,
@@ -155,8 +123,6 @@ def k_fold(config, df, log_folder=None, run=None):
             )
 
             pred_oof[df[df["fold"] == fold].index.values] = preds
-            # if log_folder is None:
-            #     return preds, preds_aux
 
             if log_folder is not None:
                 np.save(log_folder + f"pred_val_{fold}", preds)
@@ -183,10 +149,10 @@ def k_fold(config, df, log_folder=None, run=None):
         print()
         for k, v in losses.items():
             print(f"- {k}_loss\t: {v:.3f}")
-        print(f"\n -> CV Score : {avg_loss :.4f}")
+        print(f"\n -> CV Score : {avg_loss:.4f}")
 
         if log_folder is not None:
-            np.save(log_folder + "pred_oof.npy", pred_oof)            
+            np.save(log_folder + "pred_oof.npy", pred_oof)
 
         if run is not None:
             run["global/logs"].upload(log_folder + "logs.txt")

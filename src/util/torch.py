@@ -92,7 +92,7 @@ def load_model_weights(model, filename, verbose=1, cp_folder="", strict=True):
 
     if verbose:
         print(
-            f"\n -> Loading encoder weights from {os.path.join(cp_folder,filename)}\n"
+            f"\n -> Loading encoder weights from {os.path.join(cp_folder, filename)}\n"
         )
 
     return model
