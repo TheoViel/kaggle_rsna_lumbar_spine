@@ -2,9 +2,7 @@
 
 **Authors :** [Theo Viel](https://github.com/TheoViel)
 
-**About :** 
-
-## Introduction - Adapted from [Kaggle](TODO)
+## Introduction - Adapted from [Kaggle](https://www.kaggle.com/competitions/rsna-2024-lumbar-spine-degenerative-classification/discussion/541813)
 
 This repo contains Theo's part of team **NVSpine** solution to the RSNA 2024 competition, which achieved 6th place. These models alone are enough to reach a private score of 0.42 (~top15) using only the sagittal data.
 
@@ -24,41 +22,32 @@ The pipeline is illustrated below, the approach has 3 components:
 
 #### Coordinates model
 
-A simple `coatnet_rmlp_2_rw_384` trained on all the center frames of the sagittal images to predict the 5 (x, y) coordinates associated to the disk injuries. It is trained with the MSE on 10 classes, and used to generate crops. Crops generation is done by seleting the square of 20% of the image size around the predicted ROI center.
+A simple `coatnet_rmlp_2_rw_384` trained on all the center frames of the sagittal images to predict the 5 (x, y) coordinates associated with the disk injuries. It is trained with the MSE on 10 classes, and used to generate crops. Crop generation is done by selecting the square of 20% of the image size around the predicted ROI center.
 
 #### Classification models
 
-On the crop above, I once again trained CoAtNets, this time `coatnet_1_rw_224` and `coatnet_2_rw_224`, with a RNN layers to incorporate the 3D information. 
-Initially, I wanted to train separate models for each injury since each image modality had its target. For instance the SCS only models is trained to predict the 3 severity classes on the Sagittal T2 images, by sampling the 5 (or 3) frames at the center of the stack.
+On the crop above, I once again trained CoAtNets, this time `coatnet_1_rw_224` and `coatnet_2_rw_224`, with a RNN layer to incorporate the 3D information. 
+Initially, I wanted to train separate models for each injury since each image modality had its target. For instance the SCS only models are trained to predict the 3 severity classes on the Sagittal T2 images, by sampling the 5 (or 3) frames at the center of the stack.
 But handling the two sagittal modalities together worked better, so I trained a 5-frame model on all the targets (including SS!) using the sagittal data. 
 Further improvements came from adding more frames (5 is not enough to capture the SCS and SS signal) and using 3 RNN heads that had access to different frames - for the left, right and center (scs) targets. I also added MixUp and trained models for 10 epochs (vs 5 for the SCS models) and with a higher learning rate (1e-3 vs 5e-4 for the SCS models). 
-Overall the training code and architectures are very similar to my solution to last year's RSNA challenge. 
+Overall the training code and architecture are very similar to my solution to last year's RSNA challenge. 
 
 #### MLP
 
-The classification models are trained with the CE, and tweaked to maximize the AUC. The MLP model is here to aggreagate predictions, and account for the competition metric (just like last year!). Surprisingly, what worked best here is to consider each target independently, i.e. the scs_l1_l2 does not interract with the scs_l2_l3 features nor the nfn_left_l1_l2 features in the MLP. The logits weights for the different levels are shared though, i.e. the model consits of 3 MLP (one for SCS, one for SS and one for SCS).
+The classification models are trained with the CE, and tweaked to maximize the AUC. The MLP model is here to aggregate predictions, and account for the competition metric (just like last year!). Surprisingly, what worked best here is to consider each target independently, i.e. the scs_l1_l2 does not interact with the scs_l2_l3 features nor the nfn_left_l1_l2 features in the MLP. The logits layer weights for the different levels are shared though, i.e. the model consists of 3 MLP (one for SCS, one for SS and one for SCS).
 
 ### Scores
 
-- CV 0.394
-    - SCS: 0.268
-    - NFN : 0.486
-    - SS : 0.562
-    - ANY : 0.261
-- LB
-    - Public : 0.370
-    - Private : 0.420
+|         | SCS  | NFN  | SS   | ANY  | CV   |      |  Public LB | Private LB |
+|---------|------|------|------|------|------|------|------------|------------|
+| Loss    | 0.268| 0.486| 0.562| 0.261| 0.394|      | 0.370      | 0.420      |
 
-Ensembling with Christof and Darragh's pipelines achieves 13th place public and 6th place private. Ensembling is simply done by concantenating the features in the MLP model.
 
-- CV 0.382
-    - SCS: 0.260
-    - NFN : 0.475
-    - SS : 0.538
-    - ANY : 0.255
-- LB
-    - Public : 0.355
-    - Private : 0.401
+Ensembling with Christof and Darragh's pipelines achieves 13th place public and 6th place private. Ensembling is simply done by concatenating the features in the MLP model.
+
+|         | SCS  | NFN  | SS   | ANY  | CV   |      |  Public LB | Private LB |
+|---------|------|------|------|------|------|------|------------|------------|
+| Loss    | 0.260| 0.475| 0.538| 0.255| 0.382|      | 0.355      | 0.401      |
 
 
 ## How to use the repository
